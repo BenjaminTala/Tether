@@ -18,7 +18,7 @@ capital:
   commission_model: tiered      # tiered | fixed | lite  (fee estimator only; Fixed = $1 min/order)
 
 account:
-  ibkr_account_id: ""           # DU... (paper) / U... (live). Required in live mode.
+  ibkr_account_id: "DUR907051"  # paper account (live U-account goes here only at go-live)
   dedicated: false              # true once the agent has its own linked IBKR account (recommended)
   currency: USD
 
