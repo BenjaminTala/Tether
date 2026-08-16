@@ -1,0 +1,234 @@
+# mandate.yaml — the ONLY place risk numbers live. Enforced by code, never by the model.
+# Validated on load (src/ibagent/config.py); the engine refuses to start on an invalid mandate.
+# Every percentage that sizes exposure is a fraction of CURRENT POT EQUITY, so the mandate scales
+# with capital. Absolute USD floors (capital.*) keep small pots sane; position counts are derived.
+#
+# Change capital later ONLY via the ledger:  ibagent capital add 500  /  ibagent capital withdraw 300
+# (never automatic; every event is audited in data/capital_events.jsonl).
+version: 1
+mode: paper                     # paper | live   (live also needs env IBAGENT_LIVE_ACK, see go_live_gate)
+base_currency: USD
+
+capital:
+  seed_usd: 1000                # initial pot; override at init: ibagent capital init --seed 2500
+  min_operating_equity_usd: 400 # below this the engine goes core-only, no trend/spec entries, alerts
+  min_position_usd: 100         # derived: max_positions(sleeve) = min(cap, floor(sleeve_equity / this))
+  min_order_usd: 25             # never send smaller orders (dust)
+  max_fee_pct_per_trade: 0.75   # est. commission / order notional (percent); reject above
+  commission_model: tiered      # tiered | fixed | lite  (fee estimator only; Fixed = $1 min/order)
+
+account:
+  ibkr_account_id: ""           # DU... (paper) / U... (live). Required in live mode.
+  dedicated: false              # true once the agent has its own linked IBKR account (recommended)
+  currency: USD
+
+broker:
+  host: 127.0.0.1
+  port: 4002                    # 4002 Gateway paper | 4001 Gateway live | 7497 TWS paper | 7496 TWS live
+  client_id: 17
+  market_data_type: 3           # 1 live, 3 delayed (free), 4 delayed-frozen
+  fractional_shares: true
+  connect_timeout_s: 20
+
+universe:
+  profile: us                   # us | ucits  — Panama / IBKR LLC: us. (EU/UK-resident accounts must use ucits)
+  never: [TQQQ, SQQQ, UPRO, SPXU, SOXL, SOXS, TNA, TZA, UVXY, SVXY, VXX, VIXY, UVIX,
+          BITO, IBIT, GBTC, ETHE, ARKK, LABU, LABD, NUGT, DUST, JNUG, JDST]  # defense in depth
+  profiles:
+    us:
+      default_exchange: SMART
+      default_currency: USD
+      core_holdings: {VTI: 0.60, SGOV: 0.40}     # weights within the core sleeve
+      instruments:
+        - {symbol: VTI,  kind: etf,   sleeves: [core]}
+        - {symbol: SGOV, kind: etf,   sleeves: [core]}
+        - {symbol: BIL,  kind: etf,   sleeves: [core]}
+        - {symbol: SPY,  kind: etf,   sleeves: [trend]}
+        - {symbol: QQQ,  kind: etf,   sleeves: [trend]}
+        - {symbol: IWM,  kind: etf,   sleeves: [trend]}
+        - {symbol: DIA,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLK,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLF,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLE,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLV,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLI,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLP,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLY,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLU,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLB,  kind: etf,   sleeves: [trend]}
+        - {symbol: XLC,  kind: etf,   sleeves: [trend]}
+        - {symbol: SMH,  kind: etf,   sleeves: [trend]}
+        - {symbol: GLD,  kind: etf,   sleeves: [trend]}
+        - {symbol: TLT,  kind: etf,   sleeves: [trend]}
+        - {symbol: IEF,  kind: etf,   sleeves: [trend]}
+        - {symbol: EFA,  kind: etf,   sleeves: [trend]}
+        - {symbol: EEM,  kind: etf,   sleeves: [trend]}
+        - {symbol: AAPL, kind: stock, sleeves: [trend, spec]}
+        - {symbol: MSFT, kind: stock, sleeves: [trend, spec]}
+        - {symbol: NVDA, kind: stock, sleeves: [trend, spec]}
+        - {symbol: AMZN, kind: stock, sleeves: [trend, spec]}
+        - {symbol: GOOGL, kind: stock, sleeves: [trend, spec]}
+        - {symbol: META, kind: stock, sleeves: [trend, spec]}
+        - {symbol: TSLA, kind: stock, sleeves: [spec]}
+        - {symbol: AVGO, kind: stock, sleeves: [trend, spec]}
+        - {symbol: AMD,  kind: stock, sleeves: [spec]}
+        - {symbol: NFLX, kind: stock, sleeves: [trend, spec]}
+        - {symbol: CRM,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: ADBE, kind: stock, sleeves: [trend, spec]}
+        - {symbol: ORCL, kind: stock, sleeves: [trend, spec]}
+        - {symbol: CSCO, kind: stock, sleeves: [trend, spec]}
+        - {symbol: JPM,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: BAC,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: GS,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: V,    kind: stock, sleeves: [trend, spec]}
+        - {symbol: MA,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: UNH,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: LLY,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: JNJ,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: MRK,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: ABBV, kind: stock, sleeves: [trend, spec]}
+        - {symbol: PFE,  kind: stock, sleeves: [spec]}
+        - {symbol: XOM,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: CVX,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: PG,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: KO,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: PEP,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: WMT,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: COST, kind: stock, sleeves: [trend, spec]}
+        - {symbol: HD,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: MCD,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: DIS,  kind: stock, sleeves: [spec]}
+        - {symbol: CAT,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: GE,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: LIN,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: TMO,  kind: stock, sleeves: [trend, spec]}
+    ucits:                      # STARTING POINT for EU/UK-resident accounts. Verify each line (exchange,
+      default_exchange: SMART   # currency, fractional support) in TWS before enabling this profile.
+      default_currency: USD
+      core_holdings: {CSPX: 0.60, IB01: 0.40}
+      instruments:
+        - {symbol: CSPX, kind: etf, sleeves: [core, trend], exchange: LSEETF, currency: USD}   # iShares Core S&P 500 UCITS
+        - {symbol: VUAA, kind: etf, sleeves: [core, trend], exchange: LSEETF, currency: USD}   # Vanguard S&P 500 UCITS Acc
+        - {symbol: IB01, kind: etf, sleeves: [core],        exchange: LSEETF, currency: USD}   # iShares $ Treasury 0-1yr UCITS
+        - {symbol: IWDA, kind: etf, sleeves: [trend],       exchange: LSEETF, currency: USD}   # iShares Core MSCI World UCITS
+        - {symbol: CNDX, kind: etf, sleeves: [trend],       exchange: LSEETF, currency: USD}   # iShares Nasdaq 100 UCITS
+        - {symbol: AAPL, kind: stock, sleeves: [trend, spec]}
+        - {symbol: MSFT, kind: stock, sleeves: [trend, spec]}
+        - {symbol: NVDA, kind: stock, sleeves: [trend, spec]}
+        - {symbol: AMZN, kind: stock, sleeves: [trend, spec]}
+        - {symbol: GOOGL, kind: stock, sleeves: [trend, spec]}
+        - {symbol: META, kind: stock, sleeves: [trend, spec]}
+        - {symbol: AVGO, kind: stock, sleeves: [trend, spec]}
+        - {symbol: JPM,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: V,    kind: stock, sleeves: [trend, spec]}
+        - {symbol: UNH,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: LLY,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: XOM,  kind: stock, sleeves: [trend, spec]}
+        - {symbol: COST, kind: stock, sleeves: [trend, spec]}
+        - {symbol: PG,   kind: stock, sleeves: [trend, spec]}
+        - {symbol: HD,   kind: stock, sleeves: [trend, spec]}
+
+sleeves:                        # fractions of current pot equity; must sum to 1.0
+  core:  {weight: 0.50, band: 0.05}
+  trend: {weight: 0.30, band: 0.05, max_positions: 4}
+  spec:  {weight: 0.15, band: 0.05, max_positions: 3}
+  cash:  {weight: 0.05}
+  rebalance: monthly            # rebalance sleeves back into bands
+  spec_profit_sweep_to_core: 0.5  # share of realized spec profit swept into core at rebalance
+
+risk:
+  per_trade_risk_pct:  {trend: 0.010, spec: 0.0075}   # equity at risk to the stop, per new position
+  per_trade_risk_hard_cap_pct: {trend: 0.015, spec: 0.0125}  # allowed overshoot to reach min_position_usd, else skip
+  max_total_open_risk_pct: 0.05                       # sum of (qty x distance to stop) over open positions
+  max_position_weight_pct: {core: 0.35, trend: 0.12, spec: 0.06}
+  max_new_positions_per_week: 3
+  max_turnover_pct_per_week: 0.50                     # notional traded / pot equity
+  cooldown_days_after_stop_out: 5                     # same symbol re-entry
+  no_averaging_down: true                             # hard rule; validator rejects false
+  stops:
+    method: atr                                       # atr | pct
+    atr_period: 14
+    atr_multiple:     {trend: 2.5, spec: 2.0}
+    pct_distance:     {trend: 0.08, spec: 0.10}       # used when method: pct
+    min_distance_pct: 0.03                            # avoid noise stops
+    max_distance_pct: {trend: 0.12, spec: 0.15}
+    server_side: true                                 # GTC stop order lives at IBKR, survives PC/model outages
+    stop_type: STP                                    # STP | STP LMT
+    stop_limit_offset_pct: 0.01
+    never_widen: true                                 # hard rule; validator rejects false
+  targets:
+    trend: {partial_take_r: 2.0, partial_fraction: 0.5, trail_atr_multiple: 2.5}
+    spec:  {take_profit_pct: 0.25, time_stop_trading_days: 10}
+
+circuit_breakers:
+  sleeve_drawdown_pause_pct: 0.20   # sleeve equity -20% from its high-water mark → sleeve paused (exits only)
+  total_drawdown_halt_pct: 0.15     # pot -15% from HWM → liquidate active sleeves to core/cash, halt, human restart
+  daily_loss_pause_pct: 0.04        # pot -4% intraday → no new entries until next weekly run
+  consecutive_losers_pause: 5       # spec sleeve paused after N consecutive losing trades
+  data_stale_seconds: 900           # no fresh price/heartbeat → freeze new orders
+  reconcile_mismatch: freeze        # book != broker → freeze new orders + alert (never auto-fix)
+
+execution:
+  order_type: marketable_limit
+  limit_offset_bps: 15              # buy ≤ ask+15bps, sell ≥ bid-15bps
+  time_in_force: DAY
+  rth_only: true
+  no_trade_first_minutes: 15
+  no_trade_last_minutes: 10
+  slippage_alert_bps: 50
+  settled_cash_only: true           # cash account: never spend unsettled proceeds (T+1) → no good-faith violations
+  settlement_days: 1
+
+cadence:                            # times in market_timezone
+  market_timezone: America/New_York
+  weekly_review: {day: MON, time: "08:00"}   # deep Claude run; orders placed after the open window
+  daily_check:   {time: "08:45"}             # light Claude run: stops/thesis check, overnight news
+  daily_report:  {time: "16:20"}             # deterministic, no Claude
+  event:                                     # event-triggered Claude runs (deterministic gate)
+    max_per_day: 2
+    cooldown_minutes: 120
+    min_materiality: 0.70                    # news score threshold (news/scoring.py)
+    min_abs_move_pct: 0.03                   # AND price move on a held/watched symbol
+  fast_loop_seconds: 60                      # RTH: reconcile, verify stops, kill switch, heartbeat
+  slow_loop_seconds: 300                     # off-hours connectivity + heartbeat
+  news_poll_seconds: 900
+
+llm:
+  runner: claude_code               # claude_code | api (future; requires key — not used in v1)
+  claude_bin: claude                # resolved via PATH; on Windows prefers claude.exe over claude.cmd
+  model: ""                         # "" = Claude Code default; or e.g. "opus" / "sonnet"
+  max_turns:       {weekly: 25, daily: 8, event: 8}
+  timeout_seconds: {weekly: 900, daily: 420, event: 420}
+  retries_on_invalid: 1             # re-prompt once with validation errors, then HOLD
+  backoff_minutes_on_unavailable: [10, 30]
+  daily_invocation_cap: 4           # weekly + daily + events, hard cap per calendar day
+  tools: [Read, Grep, Glob, WebSearch, WebFetch]     # validator: read-only tools only
+  permission_mode: dontAsk
+  sandbox:
+    runs_root: ""                   # "" = %LOCALAPPDATA%\ibagent\runs (outside the repo: no CLAUDE.md/.mcp.json leakage)
+    deny_read_globs: []             # absolute globs the model may never read, e.g. "//C:/Users/you/ibkr-agent/**" (install_tasks.ps1 prints them)
+    webfetch_domains: [sec.gov, www.sec.gov, efts.sec.gov, www.federalreserve.gov, www.bls.gov,
+                       www.bea.gov, finance.yahoo.com, www.reuters.com, www.cnbc.com,
+                       www.marketwatch.com, www.investopedia.com, ir.aboutamazon.com]
+    scrub_env: true                 # child env is minimal; ANTHROPIC_* is always dropped (no API billing)
+
+alerts:
+  channels: [stdout, telegram]      # stdout | telegram | email | windows_toast  (secrets via env/keyring)
+  heartbeat_stale_minutes: 10       # watchdog pings you if the supervisor heartbeat is older than this
+  dedupe_minutes: 30                # identical non-critical alerts suppressed within this window
+
+kill_switch:
+  file: data/KILL                   # touch it (or `ibagent kill`) → cancel opens, no new orders, alert
+  on_kill: cancel_open_orders       # cancel_open_orders | liquidate_to_cash
+
+journal:
+  dir: data/journal
+  keep_raw_llm_output: true
+
+go_live_gate:                       # code refuses mode: live unless ALL hold
+  min_paper_calendar_days: 60
+  min_weekly_runs: 8
+  max_reconcile_freezes_30d: 0
+  max_llm_fallback_rate: 0.20       # share of runs that ended in HOLD fallback
+  ack_env_var: IBAGENT_LIVE_ACK
+  ack_value: I_UNDERSTAND_REAL_MONEY
