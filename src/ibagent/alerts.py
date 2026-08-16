@@ -30,13 +30,22 @@ Level = Literal["info", "warning", "critical"]
 # ----------------------------------------------------------------------------- secrets
 
 
+def _sanitize(val: Optional[str]) -> Optional[str]:
+    """Strip whitespace and control characters (getpass on Windows can capture backspaces as
+    \\x7f); a secret is never legitimately made of control bytes."""
+    if val is None:
+        return None
+    cleaned = "".join(c for c in val if c.isprintable()).strip()
+    return cleaned or None
+
+
 def get_secret(name: str) -> Optional[str]:
-    val = os.environ.get(name)
+    val = _sanitize(os.environ.get(name))
     if val:
         return val
     try:
         import keyring  # optional at import time; required if you use the credential store
-        return keyring.get_password(KEYRING_SERVICE, name)
+        return _sanitize(keyring.get_password(KEYRING_SERVICE, name))
     except Exception:  # keyring missing or backend unavailable
         return None
 
