@@ -118,6 +118,26 @@ def test_weekend_runs_nothing(env):
     assert sup.state.last_daily == "" and sup.state.last_report == ""
 
 
+def test_capital_ledger_syncs_into_book(env):
+    m, broker, sup, clock, tmp = env
+    from ibagent.capital import CapitalLedger
+    ledger = CapitalLedger(tmp / "capital_events.jsonl")
+    ledger.init_seed(1000.0)
+    sup.sync_capital()
+    assert sup.book.pot_cash == pytest.approx(1000.0)
+    sup.sync_capital()                                     # idempotent
+    assert sup.book.pot_cash == pytest.approx(1000.0)
+    ledger.add(500.0)
+    sup.tick(clock())                                      # picked up mid-run, no restart
+    assert sup.book.pot_cash == pytest.approx(1500.0)
+    ledger.withdraw(300.0)
+    sup.sync_capital()
+    assert sup.book.pending_withdrawal_usd == pytest.approx(300.0)
+    assert sup.book.deployable_cash(clock().date()) == pytest.approx(1200.0)
+    sup.sync_capital()                                     # withdrawal not double-requested
+    assert sup.book.pending_withdrawal_usd == pytest.approx(300.0)
+
+
 def test_watchdog(env, tmp_path):
     m, broker, sup, clock, tmp = env
     hb = tmp / "heartbeat.txt"

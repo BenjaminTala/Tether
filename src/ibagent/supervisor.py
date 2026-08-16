@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 from ibagent.agent.orchestrator import run_cycle
 from ibagent.alerts import Alerter, build_alerter
 from ibagent.book import Book
+from ibagent.capital import CapitalLedger
 from ibagent.broker.base import Bar, Broker, Contract, Quote
 from ibagent.config import Mandate
 from ibagent.data import SymbolStats, atr as calc_atr, stats_table
@@ -108,6 +109,31 @@ class Supervisor:
         self._scored_recent: list = []
         self._bars_cache: Dict[str, List[Bar]] = {}
         self._bars_cache_day: str = ""
+        self.sync_capital()
+
+    def sync_capital(self) -> None:
+        """Carry human ledger events (seed/add/withdraw) into the book. Idempotent: called at
+        startup and every tick, so `ibagent capital add` takes effect without a restart."""
+        ledger = CapitalLedger(self.data_dir / "capital_events.jsonl")
+        target = ledger.net_contributions()
+        current = self.book.net_contributions
+        after_pending = current - self.book.pending_withdrawal_usd
+        changed = False
+        if target > current + 0.005:
+            amount = round(target - current, 2)
+            self.book.apply_contribution(amount)
+            self.journal.record("capital_sync", {"kind": "contribution", "amount": amount})
+            self.alerter.info("capital added to pot", f"${amount:,.2f} now deployable")
+            changed = True
+        elif target < after_pending - 0.005:
+            amount = round(after_pending - target, 2)
+            self.book.request_withdrawal(amount)
+            self.journal.record("capital_sync", {"kind": "withdrawal_requested", "amount": amount})
+            self.alerter.info("withdrawal requested",
+                              f"${amount:,.2f} will be freed from pot cash at the next window")
+            changed = True
+        if changed:
+            self.book.save()
 
     # ------------------------------------------------------------------ lifecycle
     def run(self) -> None:
@@ -149,6 +175,7 @@ class Supervisor:
     def tick(self, now: datetime) -> None:
         now = utc(now)
         self._heartbeat(now)
+        self.sync_capital()
         if self._kill_engaged():
             return
         if not self._ensure_connected():
