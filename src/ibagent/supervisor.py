@@ -191,7 +191,8 @@ class Supervisor:
             self.book.update_high_prices(prices)
             self.book.update_hwm(snap)
             self.book.ensure_day(now.astimezone(self.tz).date(), snap.equity)
-            self.book.ensure_week(now.astimezone(self.tz).date())
+            self.book.ensure_week(now.astimezone(self.tz).date(), snap.equity)
+            self.book.ensure_month(now.astimezone(self.tz).date(), snap.equity)
             self.book.settle_through(now.date())
             self.book.save()
         elif held:
@@ -294,6 +295,18 @@ class Supervisor:
                 self.book.pause_sleeve(sleeve, until)
                 self.journal.record("breaker", {"sleeve": sleeve, "until": until.isoformat()})
                 self.alerter.warning(f"{sleeve} sleeve paused", f"until {until}")
+        if state.pause_all_entries and not self.book.entries_paused(today):
+            self.book.pause_entries(today, "daily loss limit")
+            self.journal.record("breaker", {"pause": "daily", "until": today.isoformat()})
+            self.alerter.warning("daily loss limit hit", "no new entries for the rest of today")
+        if state.pause_entries_until and state.pause_entries_until > \
+                (date.fromisoformat(self.book.entries_paused_until) if self.book.entries_paused_until
+                 else date.min):
+            self.book.pause_entries(state.pause_entries_until, state.pause_entries_reason)
+            self.journal.record("breaker", {"pause": state.pause_entries_reason,
+                                            "until": state.pause_entries_until.isoformat()})
+            self.alerter.warning("entries paused", f"{state.pause_entries_reason} — "
+                                                   f"until {state.pause_entries_until}")
         if state.halt and not self.book.halted:
             self.book.halt("; ".join(state.reasons)[:300])
             self.journal.record("halt", {"reasons": state.reasons})
@@ -487,6 +500,9 @@ class Supervisor:
         for sleeve, until in sorted(self.book.paused_sleeves.items()):
             if self.book.is_sleeve_paused(sleeve, today):
                 out.append(f"The {sleeve} strategy is paused (losses) until {until}.")
+        if self.book.entries_paused(today):
+            out.append(f"New buying is paused until {self.book.entries_paused_until} "
+                       f"({self.book.entries_paused_reason}).")
         if self.book.consecutive_spec_losers >= 3:
             out.append(f"{self.book.consecutive_spec_losers} speculative trades lost in a row.")
         for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):

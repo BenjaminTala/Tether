@@ -242,6 +242,17 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
             plan.rejections.append(Rejection(p.symbol, "entry",
                                              f"equity {snap.equity:.0f} below operating floor"))
         return plan
+    if book.entries_paused(today):
+        for p, _ in entries:
+            plan.rejections.append(Rejection(p.symbol, "entry",
+                                             f"entries paused until {book.entries_paused_until}: "
+                                             f"{book.entries_paused_reason}"))
+        return plan
+    # HALF-RISK band: in a >10% drawdown from the high-water mark, new risk is halved
+    risk_scale = 1.0
+    hwm = book.hwm.get("total", 0.0)
+    if hwm > 0 and (hwm - snap.equity) / hwm >= mandate.circuit_breakers.half_risk_drawdown_pct:
+        risk_scale = 0.5
 
     open_risk = open_risk_usd(book, prices)
     max_risk = mandate.risk.max_total_open_risk_pct * snap.equity
@@ -290,13 +301,13 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
             stop = held.stop_price                       # adds never widen the resting stop
 
         # risk-based size, capped by the requested diff
-        risk_usd = mandate.per_trade_risk_usd(sleeve, snap.equity)
+        risk_usd = mandate.per_trade_risk_usd(sleeve, snap.equity) * risk_scale
         per_share_risk = price - stop
         qty = min(diff / price, risk_usd / per_share_risk)
         notional = qty * price
         floor = mandate.capital.min_position_usd if is_new else mandate.capital.min_order_usd
         if notional < floor:
-            hard = mandate.per_trade_risk_usd(sleeve, snap.equity, hard_cap=True)
+            hard = mandate.per_trade_risk_usd(sleeve, snap.equity, hard_cap=True) * risk_scale
             qty = min(diff / price, hard / per_share_risk)
             notional = qty * price
             if notional < floor:

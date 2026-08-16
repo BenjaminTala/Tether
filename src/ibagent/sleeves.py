@@ -44,12 +44,16 @@ class RebalanceIntent:
 class BreakerState:
     halt: bool = False
     pause_all_entries: bool = False              # daily loss breaker
+    pause_entries_until: Optional[date] = None   # weekly/monthly dd, losing streak (persisted)
+    pause_entries_reason: str = ""
+    risk_scale: float = 1.0                      # 0.5 while in the half-risk drawdown band
     paused_sleeves: Set[str] = field(default_factory=set)
     reasons: List[str] = field(default_factory=list)
 
     @property
     def any_tripped(self) -> bool:
-        return self.halt or self.pause_all_entries or bool(self.paused_sleeves)
+        return (self.halt or self.pause_all_entries or bool(self.paused_sleeves)
+                or self.pause_entries_until is not None or self.risk_scale < 1.0)
 
 
 # --------------------------------------------------------------------------- protective actions
@@ -127,7 +131,42 @@ def evaluate_breakers(mandate: Mandate, book: Book, snap: EquitySnapshot) -> Bre
     pause_all = daily >= cb.daily_loss_pause_pct
     if pause_all:
         reasons.append(f"daily loss {daily:.1%} >= {cb.daily_loss_pause_pct:.0%} (no new entries)")
-    return BreakerState(halt=halt, pause_all_entries=pause_all, paused_sleeves=paused, reasons=reasons)
+
+    # ---- calendar drawdown pauses (release at the next natural boundary) ----------------
+    from ibagent.marketclock import add_trading_days, next_trading_day
+    pause_until: Optional[date] = None
+    pause_reason = ""
+
+    def _extend(until: date, why: str) -> None:
+        nonlocal pause_until, pause_reason
+        if pause_until is None or until > pause_until:
+            pause_until, pause_reason = until, why
+        reasons.append(why)
+
+    weekly = book.weekly_loss_pct(snap.equity)
+    if weekly >= cb.weekly_drawdown_pause_pct:
+        _extend(today + timedelta(days=6 - today.weekday()),       # through Sunday -> next Monday
+                f"weekly drawdown {weekly:.1%} >= {cb.weekly_drawdown_pause_pct:.0%} (entries until Monday)")
+    monthly = book.monthly_loss_pct(snap.equity)
+    if monthly >= cb.monthly_drawdown_pause_pct:
+        last_dom = (date(today.year + (today.month == 12), today.month % 12 + 1, 1) - timedelta(days=1))
+        _extend(last_dom,
+                f"monthly drawdown {monthly:.1%} >= {cb.monthly_drawdown_pause_pct:.0%} (entries until next month)")
+    if book.consecutive_active_losers >= cb.account_losing_streak_cooldown:
+        last_close = max((t["date"] for h in book.trade_history.values() for t in h), default=None)
+        if last_close:
+            _extend(add_trading_days(date.fromisoformat(last_close), cb.account_losing_streak_days),
+                    f"{book.consecutive_active_losers} losing trades in a row (cooldown)")
+
+    risk_scale = 1.0
+    if not halt and book.drawdown(snap, "total") >= cb.half_risk_drawdown_pct:
+        risk_scale = 0.5
+        reasons.append(f"drawdown {book.drawdown(snap, 'total'):.1%} >= "
+                       f"{cb.half_risk_drawdown_pct:.0%}: HALF RISK until a new equity high")
+
+    return BreakerState(halt=halt, pause_all_entries=pause_all, pause_entries_until=pause_until,
+                        pause_entries_reason=pause_reason, risk_scale=risk_scale,
+                        paused_sleeves=paused, reasons=reasons)
 
 
 def sleeve_pause_until(today: date, days: int = 30) -> date:

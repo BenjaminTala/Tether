@@ -182,6 +182,15 @@ class Executor:
             realized = self._apply_sell(f, pos.sleeve, reason="protective stop fired")
             self.book.record_stop_out(f.symbol, f.ts.date(),
                                       self.m.risk.cooldown_days_after_stop_out)
+            cb = self.m.circuit_breakers
+            n = self.book.stopouts_within(f.symbol, f.ts.date(), cb.symbol_stopout_window_sessions)
+            if n >= cb.symbol_stopout_lock_count:
+                self.book.add_cooldown(f.symbol, f.ts.date(), cb.symbol_stopout_lock_sessions)
+                self.journal.record("symbol_stop_guard", {"symbol": f.symbol, "stopouts": n,
+                                                          "sessions": cb.symbol_stopout_lock_sessions})
+                self.alerter.warning(f"{f.symbol} stop-loss guard",
+                                     f"{n} stop-outs in {cb.symbol_stopout_window_sessions} sessions; "
+                                     f"locked for {cb.symbol_stopout_lock_sessions} sessions")
             self.alerter.warning(f"stop-out {f.symbol}",
                                  f"{f.qty:g} @ {f.price} realized {realized:+.2f}")
             applied.append(f)
@@ -272,9 +281,27 @@ class Executor:
         old_tag = pos.stop_order_tag if pos else ""
         realized = self.book.apply_fill(f, sleeve, self.m.execution.settlement_days)
         self.journal.record("fill", {**_fill_payload(f, sleeve, reason), "realized": realized})
-        if f.symbol not in self.book.positions and old_tag:
-            self._cancel_stop_by_tag(old_tag)                    # position gone: no orphan GTC stop
+        if f.symbol not in self.book.positions:
+            if old_tag:
+                self._cancel_stop_by_tag(old_tag)                # position gone: no orphan GTC stop
+            if sleeve != "core":
+                self._post_close_locks(f)
         return realized
+
+    def _post_close_locks(self, f: Fill) -> None:
+        """Per-instrument locks after a full close: re-entry cooldown on any exit, and the
+        persistent-underperformer bench (cum R of the last N closed trades below threshold)."""
+        cb = self.m.circuit_breakers
+        today = f.ts.date()
+        self.book.add_cooldown(f.symbol, today, self.m.risk.cooldown_days_after_exit)
+        rsum = self.book.recent_r_sum(f.symbol, cb.underperformer_lookback_trades)
+        if rsum is not None and rsum <= cb.underperformer_threshold_r:
+            self.book.add_cooldown(f.symbol, today, cb.underperformer_lock_sessions)
+            self.journal.record("symbol_benched", {"symbol": f.symbol, "cum_r": rsum,
+                                                   "sessions": cb.underperformer_lock_sessions})
+            self.alerter.warning(f"{f.symbol} benched",
+                                 f"last {cb.underperformer_lookback_trades} trades sum to {rsum:+.1f}R; "
+                                 f"locked for {cb.underperformer_lock_sessions} sessions")
 
     def _release_stop(self, symbol: str) -> None:
         """Cancel the resting GTC stop before an engine SELL so the shares are not reserved

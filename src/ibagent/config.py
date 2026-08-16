@@ -233,6 +233,7 @@ class RiskCfg(Strict):
     max_new_positions_per_week: int = Field(ge=0)
     max_turnover_pct_per_week: float = Field(gt=0, le=3)
     cooldown_days_after_stop_out: int = Field(ge=0)
+    cooldown_days_after_exit: int = Field(ge=0, default=5)   # ANY full exit locks re-entry (sessions)
     no_averaging_down: Literal[True] = True
     stops: StopsCfg
     targets: TargetsCfg
@@ -257,9 +258,26 @@ class CircuitBreakersCfg(Strict):
     sleeve_drawdown_pause_pct: float = Field(gt=0, lt=1)
     total_drawdown_halt_pct: float = Field(gt=0, lt=1)
     daily_loss_pause_pct: float = Field(gt=0, lt=1)
-    consecutive_losers_pause: int = Field(ge=2)
+    weekly_drawdown_pause_pct: float = Field(gt=0, lt=1, default=0.07)   # from week-open equity
+    monthly_drawdown_pause_pct: float = Field(gt=0, lt=1, default=0.10)  # from month-open equity
+    half_risk_drawdown_pct: float = Field(gt=0, lt=1, default=0.10)      # HWM dd -> half risk budget
+    consecutive_losers_pause: int = Field(ge=2)                          # spec sleeve pause
+    account_losing_streak_cooldown: int = Field(ge=2, default=3)         # any-active-sleeve streak
+    account_losing_streak_days: int = Field(ge=1, default=2)             # entry pause length (sessions)
+    symbol_stopout_lock_count: int = Field(ge=2, default=2)              # N stop-outs ...
+    symbol_stopout_window_sessions: int = Field(ge=5, default=60)        # ... within this window ...
+    symbol_stopout_lock_sessions: int = Field(ge=1, default=30)          # ... locks the symbol
+    underperformer_lookback_trades: int = Field(ge=2, default=4)
+    underperformer_threshold_r: float = Field(lt=0, default=-1.0)        # cum R below this ...
+    underperformer_lock_sessions: int = Field(ge=1, default=60)          # ... benches the symbol
     data_stale_seconds: int = Field(ge=60)
     reconcile_mismatch: Literal["freeze"] = "freeze"
+
+    @model_validator(mode="after")
+    def _check(self) -> "CircuitBreakersCfg":
+        if self.half_risk_drawdown_pct >= self.total_drawdown_halt_pct:
+            raise ValueError("half_risk_drawdown_pct must sit below total_drawdown_halt_pct")
+        return self
 
 
 class ExecutionCfg(Strict):

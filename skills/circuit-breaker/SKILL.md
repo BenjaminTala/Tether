@@ -41,6 +41,20 @@ would spend most of its life halted. Widen the percentage, never the number of c
 
 Exits are NEVER blocked by a circuit breaker. Reducing risk is always permitted in every state.
 
+## Per-instrument locks (layered on top of account-level state)
+Account-level halts are blunt. Add instrument-level locks that compose with them, evaluated in
+order, each one narrowing what is permitted:
+
+| Lock | Trigger | Duration |
+|---|---|---|
+| Post-exit cooldown | Any exit in this ticker | 5 sessions |
+| Stop-loss guard | 2+ stop-outs in this ticker in 60 sessions | 30 sessions |
+| Persistent underperformer | Cumulative R across last 4 closed trades in this ticker < -1R | 60 sessions, review at monthly |
+
+The third is a self-pruning mechanism: an instrument the system keeps losing money in gets
+removed from consideration without anyone having to notice and argue about it. Locks apply to
+entries only; exits are never locked.
+
 ## Fail-closed rule (critical)
 If journal state is missing, unparseable, internally inconsistent, or if any thesis has a
 realized-P&L entry that is absent or non-finite, the decision is `HALTED` with
@@ -63,6 +77,13 @@ the scheduler.
  "release_condition": "next Monday 2026-08-17", "equity": 1043.22, "high_water": 1180.05}
 ```
 
+## Backtest parity (critical)
+Whatever harness is used for evaluation must apply these breakers and locks **by default**.
+Freqtrade requires an explicit `--enable-protections` flag to apply its equivalent rules during
+backtesting, which is a well-documented way to produce results that flatter a strategy the live
+bot would never have been allowed to run. Here, the rules are on in every mode; a flag exists
+only to turn them *off*, and using it marks the run's output as non-comparable.
+
 ## Adapted from
 `drawdown-circuit-breaker` in tradermonty/claude-trading-skills (MIT). Kept: state-file-only
 evaluation, fail-closed on partial data, ET boundaries, `--as-of` determinism, explicit release
@@ -70,3 +91,7 @@ conditions. Changed: thresholds re-tuned for a small account and low trade count
 sleeve-level and high-water tiers; **removed the "recommendation, not enforcement" framing** —
 in this system the artifact is binding and the execution engine refuses to place entry orders
 without a passing one.
+
+Per-instrument locks and the layering idea are adapted from Freqtrade's Protections
+(`CooldownPeriod`, `StoplossGuard`, `MaxDrawdown`, `LowProfitPairs`), rewritten from
+candle-counts to session-counts and from crypto pairs to whitelist tickers.

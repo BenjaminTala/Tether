@@ -146,7 +146,8 @@ risk:
   max_position_weight_pct: {core: 0.35, trend: 0.12, spec: 0.06}
   max_new_positions_per_week: 3
   max_turnover_pct_per_week: 0.50                     # notional traded / pot equity
-  cooldown_days_after_stop_out: 5                     # same symbol re-entry
+  cooldown_days_after_stop_out: 5                     # same symbol re-entry after a stop fired
+  cooldown_days_after_exit: 5                         # same symbol re-entry after ANY full exit
   no_averaging_down: true                             # hard rule; validator rejects false
   stops:
     method: atr                                       # atr | pct
@@ -166,8 +167,19 @@ risk:
 circuit_breakers:
   sleeve_drawdown_pause_pct: 0.20   # sleeve equity -20% from its high-water mark → sleeve paused (exits only)
   total_drawdown_halt_pct: 0.15     # pot -15% from HWM → liquidate active sleeves to core/cash, halt, human restart
-  daily_loss_pause_pct: 0.04        # pot -4% intraday → no new entries until next weekly run
-  consecutive_losers_pause: 5       # spec sleeve paused after N consecutive losing trades
+  daily_loss_pause_pct: 0.04        # pot -4% intraday → no new entries today
+  weekly_drawdown_pause_pct: 0.07   # pot -7% from week-open equity → entries paused until next Monday
+  monthly_drawdown_pause_pct: 0.10  # pot -10% from month-open → entries paused until next month
+  half_risk_drawdown_pct: 0.10      # pot -10% from HWM → new entries at HALF the risk budget until new high
+  consecutive_losers_pause: 5       # spec sleeve paused after N consecutive losing spec trades
+  account_losing_streak_cooldown: 3 # N consecutive losing ACTIVE closes (any sleeve) → entry cooldown
+  account_losing_streak_days: 2     #   ... for this many sessions after the last losing exit
+  symbol_stopout_lock_count: 2      # per-symbol: N stop-outs ...
+  symbol_stopout_window_sessions: 60  # ... within this window ...
+  symbol_stopout_lock_sessions: 30  # ... lock the symbol for this long
+  underperformer_lookback_trades: 4 # per-symbol: cum R of last N closed trades ...
+  underperformer_threshold_r: -1.0  # ... below this ...
+  underperformer_lock_sessions: 60  # ... benches the symbol (self-pruning)
   data_stale_seconds: 900           # no fresh price/heartbeat → freeze new orders
   reconcile_mismatch: freeze        # book != broker → freeze new orders + alert (never auto-fix)
 

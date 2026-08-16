@@ -65,6 +65,8 @@ class BookPosition:
     partial_taken: bool = False           # trend: +2R partial already sold
     stop_order_tag: str = ""              # client_tag of the GTC stop resting at the broker
     high_price: float = 0.0               # highest mark since entry (trailing basis)
+    realized_to_date: float = 0.0         # realized P&L booked by partial sells of THIS position
+    peak_qty: float = 0.0                 # largest qty ever held (R-multiple denominator)
 
     @property
     def initial_risk_per_share(self) -> Optional[float]:
@@ -116,6 +118,14 @@ class Book:
         self.week_turnover_usd: float = 0.0
         self.cooldowns: Dict[str, str] = {}                      # symbol -> ISO date (inclusive) until blocked
         self.consecutive_spec_losers: int = 0
+        self.consecutive_active_losers: int = 0                  # losing full closes, any active sleeve
+        self.week_start_equity: float = 0.0                      # equity anchor at the week roll
+        self.month_key: str = ""                                 # YYYY-MM the month anchor belongs to
+        self.month_start_equity: float = 0.0
+        self.entries_paused_until: str = ""                      # ISO date (inclusive); "" = not paused
+        self.entries_paused_reason: str = ""
+        self.stopout_history: Dict[str, List[str]] = {}          # symbol -> ISO dates of stop-outs
+        self.trade_history: Dict[str, List[dict]] = {}           # symbol -> last closed trades {date, realized, r}
         self.frozen: bool = False
         self.frozen_reason: str = ""
         self.halted: bool = False
@@ -142,14 +152,18 @@ class Book:
                 book.positions[k] = BookPosition(**v)
             for name in ("pot_cash", "pending_withdrawal_usd", "net_contributions", "spec_profit_since_sweep",
                          "day_date", "day_start_equity", "week_start", "week_new_positions", "week_turnover_usd",
-                         "consecutive_spec_losers", "frozen", "frozen_reason", "halted", "halted_reason",
-                         "last_fill_ts"):
-                setattr(book, name, data[name])
+                         "consecutive_spec_losers", "consecutive_active_losers", "week_start_equity",
+                         "month_key", "month_start_equity", "entries_paused_until", "entries_paused_reason",
+                         "frozen", "frozen_reason", "halted", "halted_reason", "last_fill_ts"):
+                if name in data:                                 # new fields default on older files
+                    setattr(book, name, data[name])
             book.pending_settlements = [tuple(x) for x in data["pending_settlements"]]
             book.realized_pnl = dict(data["realized_pnl"])
             book.hwm = dict(data["hwm"])
             book.cooldowns = dict(data["cooldowns"])
             book.paused_sleeves = dict(data["paused_sleeves"])
+            book.stopout_history = {k: list(v) for k, v in data.get("stopout_history", {}).items()}
+            book.trade_history = {k: list(v) for k, v in data.get("trade_history", {}).items()}
         except (KeyError, TypeError) as exc:
             raise BookError(f"book file malformed: {exc}") from exc
         return book
@@ -172,6 +186,14 @@ class Book:
             "week_turnover_usd": self.week_turnover_usd,
             "cooldowns": self.cooldowns,
             "consecutive_spec_losers": self.consecutive_spec_losers,
+            "consecutive_active_losers": self.consecutive_active_losers,
+            "week_start_equity": self.week_start_equity,
+            "month_key": self.month_key,
+            "month_start_equity": self.month_start_equity,
+            "entries_paused_until": self.entries_paused_until,
+            "entries_paused_reason": self.entries_paused_reason,
+            "stopout_history": self.stopout_history,
+            "trade_history": self.trade_history,
             "frozen": self.frozen,
             "frozen_reason": self.frozen_reason,
             "halted": self.halted,
@@ -258,6 +280,7 @@ class Book:
             new_qty = pos.qty + fill.qty
             pos.avg_cost = (pos.qty * pos.avg_cost + notional + fill.commission) / new_qty
             pos.qty = round(new_qty, 8)
+            pos.peak_qty = max(pos.peak_qty, pos.qty)
             self.pot_cash -= notional + fill.commission
             if counts_as_new:
                 self.week_new_positions += 1
@@ -269,15 +292,24 @@ class Book:
                 raise BookError(f"{fill.symbol}: fill sleeve {sleeve} != book sleeve {pos.sleeve}")
             realized = round((fill.price - pos.avg_cost) * fill.qty - fill.commission, 2)
             self.realized_pnl[sleeve] = round(self.realized_pnl[sleeve] + realized, 2)
+            pos.realized_to_date = round(pos.realized_to_date + realized, 2)
             proceeds = notional - fill.commission
             self.pot_cash += proceeds
             self.pending_settlements.append((_iso(add_trading_days(ts.date(), settlement_days)), proceeds))
             pos.qty = round(pos.qty - fill.qty, 8)
             if pos.qty <= QTY_TOL:
                 del self.positions[fill.symbol]
+                total = pos.realized_to_date
+                if sleeve != "core":
+                    irps = pos.initial_risk_per_share
+                    r = round(total / (irps * pos.peak_qty), 3) if irps and pos.peak_qty else None
+                    hist = self.trade_history.setdefault(fill.symbol, [])
+                    hist.append({"date": _iso(ts.date()), "realized": total, "r": r})
+                    del hist[:-8]
+                    self.consecutive_active_losers = 0 if total > 0 else self.consecutive_active_losers + 1
                 if sleeve == "spec":
-                    self.spec_profit_since_sweep = round(self.spec_profit_since_sweep + realized, 2)
-                    self.consecutive_spec_losers = 0 if realized > 0 else self.consecutive_spec_losers + 1
+                    self.spec_profit_since_sweep = round(self.spec_profit_since_sweep + total, 2)
+                    self.consecutive_spec_losers = 0 if total > 0 else self.consecutive_spec_losers + 1
         self.last_fill_ts = ts.isoformat()
         return realized
 
@@ -299,8 +331,39 @@ class Book:
             pos.initial_stop = new_stop
         return True
 
+    def add_cooldown(self, symbol: str, today: date, cooldown_days: int) -> None:
+        """Per-symbol entry lock; overlapping locks keep the LATEST release date."""
+        until = _iso(add_trading_days(today, cooldown_days))
+        cur = self.cooldowns.get(symbol, "")
+        if until > cur:
+            self.cooldowns[symbol] = until
+
     def record_stop_out(self, symbol: str, today: date, cooldown_days: int) -> None:
-        self.cooldowns[symbol] = _iso(add_trading_days(today, cooldown_days))
+        self.add_cooldown(symbol, today, cooldown_days)
+        hist = self.stopout_history.setdefault(symbol, [])
+        hist.append(_iso(today))
+        del hist[:-10]
+
+    def stopouts_within(self, symbol: str, today: date, window_sessions: int) -> int:
+        from ibagent.marketclock import trading_days_between
+        count = 0
+        for d in self.stopout_history.get(symbol, []):
+            when = date.fromisoformat(d)
+            if when <= today and trading_days_between(when, today) <= window_sessions:
+                count += 1
+        return count
+
+    def recent_r_sum(self, symbol: str, lookback: int) -> Optional[float]:
+        """Cumulative R over the last `lookback` closed trades; None until that many exist
+        (or when any of them has no measurable R — fail toward not judging, the trades still
+        count via the account-level streaks)."""
+        hist = self.trade_history.get(symbol, [])
+        if len(hist) < lookback:
+            return None
+        rs = [t.get("r") for t in hist[-lookback:]]
+        if any(r is None for r in rs):
+            return None
+        return round(sum(rs), 3)
 
     def in_cooldown(self, symbol: str, today: date) -> bool:
         until = self.cooldowns.get(symbol)
@@ -361,18 +424,48 @@ class Book:
         self.day_date, self.day_start_equity = iso, current_equity
         return True
 
-    def ensure_week(self, today: date) -> bool:
-        """Reset weekly counters on a new ISO week. Returns True if the week rolled."""
+    def ensure_week(self, today: date, current_equity: float = 0.0) -> bool:
+        """Reset weekly counters (and the drawdown anchor) on a new ISO week."""
         wk = _iso(_monday(today))
         if self.week_start == wk:
+            if self.week_start_equity <= 0 < current_equity:
+                self.week_start_equity = current_equity        # first mark of an already-rolled week
             return False
         self.week_start, self.week_new_positions, self.week_turnover_usd = wk, 0, 0.0
+        self.week_start_equity = current_equity
+        return True
+
+    def ensure_month(self, today: date, current_equity: float = 0.0) -> bool:
+        key = today.strftime("%Y-%m")
+        if self.month_key == key:
+            if self.month_start_equity <= 0 < current_equity:
+                self.month_start_equity = current_equity
+            return False
+        self.month_key, self.month_start_equity = key, current_equity
         return True
 
     def daily_loss_pct(self, current_equity: float) -> float:
         if self.day_start_equity <= 0:
             return 0.0
         return max(0.0, (self.day_start_equity - current_equity) / self.day_start_equity)
+
+    def weekly_loss_pct(self, current_equity: float) -> float:
+        if self.week_start_equity <= 0:
+            return 0.0
+        return max(0.0, (self.week_start_equity - current_equity) / self.week_start_equity)
+
+    def monthly_loss_pct(self, current_equity: float) -> float:
+        if self.month_start_equity <= 0:
+            return 0.0
+        return max(0.0, (self.month_start_equity - current_equity) / self.month_start_equity)
+
+    # ------------------------------------------------------------------ entry pause (all sleeves)
+    def pause_entries(self, until: date, reason: str) -> None:
+        if _iso(until) > self.entries_paused_until:
+            self.entries_paused_until, self.entries_paused_reason = _iso(until), reason[:200]
+
+    def entries_paused(self, today: date) -> bool:
+        return bool(self.entries_paused_until) and today <= date.fromisoformat(self.entries_paused_until)
 
     # ------------------------------------------------------------------ freeze / halt / pause
     def freeze(self, reason: str) -> None:
