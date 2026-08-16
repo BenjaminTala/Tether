@@ -408,13 +408,30 @@ class Supervisor:
             return
         day_pnl = snap.equity - self.book.day_start_equity if self.book.day_start_equity else 0.0
         day_pct = day_pnl / self.book.day_start_equity if self.book.day_start_equity else 0.0
+        since_start = snap.equity - self.book.net_contributions
+        since_pct = since_start / self.book.net_contributions if self.book.net_contributions > 0 else 0.0
         mood = "📈" if day_pnl >= 0 else "📉"
+
+        # ---- plain-language summary first -------------------------------------------------
         lines = [
-            f"Equity   ${snap.equity:>10,.2f}   {day_pnl:+,.2f} ({day_pct:+.2%}) today",
-            f"Cash     ${snap.pot_cash:>10,.2f}   settled ${snap.settled_pot_cash:,.2f}",
-            f"Sleeves  core ${snap.sleeve_value['core']:,.0f} · trend "
-            f"${snap.sleeve_value['trend']:,.0f} · spec ${snap.sleeve_value['spec']:,.0f}",
+            f"Today:        {day_pnl:+,.2f} $ ({day_pct:+.2%})",
+            f"Since start:  {since_start:+,.2f} $ ({since_pct:+.2%}) on "
+            f"${self.book.net_contributions:,.0f} put in",
         ]
+        watch = self._watch_outs(prices, now)
+        lines.append("")
+        if watch:
+            lines.append("Watch out:")
+            lines += [f"• {w}" for w in watch]
+        else:
+            lines.append("Nothing needs your attention. ✅")
+
+        # ---- details ----------------------------------------------------------------------
+        lines += ["", "— details —",
+                  f"Equity ${snap.equity:,.2f} · cash ${snap.pot_cash:,.2f} "
+                  f"(settled ${snap.settled_pot_cash:,.2f})",
+                  f"Sleeves: core ${snap.sleeve_value['core']:,.0f} · trend "
+                  f"${snap.sleeve_value['trend']:,.0f} · spec ${snap.sleeve_value['spec']:,.0f}"]
         if self.book.positions:
             lines += ["", f"{'SYM':<6}{'SLEEVE':<7}{'QTY':>8}{'AVG':>9}{'NOW':>9}{'P&L':>9}  STOP"]
             for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
@@ -425,14 +442,38 @@ class Supervisor:
                              f"{mark:>9.2f}{pnl:>+9.2f}  {stop}")
         else:
             lines += ["", "no open positions"]
-        flags = [f for f, on in (("HALTED", self.book.halted), ("FROZEN", self.book.frozen)) if on]
-        if self.book.paused_sleeves:
-            flags.append(f"paused: {', '.join(self.book.paused_sleeves)}")
-        if flags:
-            lines += ["", "⚠ " + " · ".join(flags)]
         body = "\n".join(lines)
         self.journal.record("daily_report", {"equity": snap.equity, "text": body})
         self.alerter.info(f"{mood} Daily report — {now.astimezone(self.tz):%a %b %d}", body)
+
+    def _watch_outs(self, prices: Dict[str, float], now: datetime) -> List[str]:
+        """Plain-language flags a non-technical reader should act on or know about."""
+        out: List[str] = []
+        if self.book.halted:
+            out.append("TRADING IS HALTED (big drawdown) — everything moved to safety; "
+                       "restarting needs you.")
+        if self.book.frozen:
+            out.append("Engine is FROZEN: the book and IBKR disagree — check the account.")
+        if Path(self.m.kill_switch.file).exists():
+            out.append("Kill switch is engaged — the agent is not trading.")
+        today = now.astimezone(self.tz).date()
+        for sleeve, until in sorted(self.book.paused_sleeves.items()):
+            if self.book.is_sleeve_paused(sleeve, today):
+                out.append(f"The {sleeve} strategy is paused (losses) until {until}.")
+        if self.book.consecutive_spec_losers >= 3:
+            out.append(f"{self.book.consecutive_spec_losers} speculative trades lost in a row.")
+        for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
+            mark = prices.get(p.symbol)
+            if mark and p.stop_price and mark > 0 and (mark - p.stop_price) / mark <= 0.03:
+                out.append(f"{p.symbol} is within 3% of its safety exit (stop {p.stop_price:.2f}) — "
+                           "it may be sold automatically soon.")
+            if p.time_stop_date:
+                from ibagent.marketclock import trading_days_between
+                left = trading_days_between(today, date.fromisoformat(p.time_stop_date))
+                if 0 <= left <= 2:
+                    out.append(f"{p.symbol} reaches its time limit in {left} trading day(s) — "
+                               "it will be sold if the idea hasn't worked.")
+        return out
 
     def _maybe_rebalance(self, now: datetime) -> None:
         local = now.astimezone(self.tz)
