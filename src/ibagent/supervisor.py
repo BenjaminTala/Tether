@@ -406,20 +406,33 @@ class Supervisor:
         except Exception as exc:
             self.alerter.warning("daily report skipped", str(exc)[:200])
             return
-        lines = [f"equity ${snap.equity:,.2f}  cash ${snap.pot_cash:,.2f} "
-                 f"(settled ${snap.settled_pot_cash:,.2f})",
-                 f"day P&L {snap.equity - self.book.day_start_equity:+,.2f}"
-                 if self.book.day_start_equity else "",
-                 f"sleeves core ${snap.sleeve_value['core']:,.2f} / trend "
-                 f"${snap.sleeve_value['trend']:,.2f} / spec ${snap.sleeve_value['spec']:,.2f}"]
-        for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
-            mark = prices.get(p.symbol, p.avg_cost)
-            pnl = (mark - p.avg_cost) * p.qty
-            lines.append(f"  {p.symbol:<5} {p.sleeve:<5} {p.qty:g} @ {p.avg_cost:.2f} "
-                         f"-> {mark:.2f}  {pnl:+,.2f}  stop {p.stop_price}")
-        body = "\n".join(l for l in lines if l)
+        day_pnl = snap.equity - self.book.day_start_equity if self.book.day_start_equity else 0.0
+        day_pct = day_pnl / self.book.day_start_equity if self.book.day_start_equity else 0.0
+        mood = "📈" if day_pnl >= 0 else "📉"
+        lines = [
+            f"Equity   ${snap.equity:>10,.2f}   {day_pnl:+,.2f} ({day_pct:+.2%}) today",
+            f"Cash     ${snap.pot_cash:>10,.2f}   settled ${snap.settled_pot_cash:,.2f}",
+            f"Sleeves  core ${snap.sleeve_value['core']:,.0f} · trend "
+            f"${snap.sleeve_value['trend']:,.0f} · spec ${snap.sleeve_value['spec']:,.0f}",
+        ]
+        if self.book.positions:
+            lines += ["", f"{'SYM':<6}{'SLEEVE':<7}{'QTY':>8}{'AVG':>9}{'NOW':>9}{'P&L':>9}  STOP"]
+            for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
+                mark = prices.get(p.symbol, p.avg_cost)
+                pnl = (mark - p.avg_cost) * p.qty
+                stop = f"{p.stop_price:.2f}" if p.stop_price else "—"
+                lines.append(f"{p.symbol:<6}{p.sleeve:<7}{p.qty:>8g}{p.avg_cost:>9.2f}"
+                             f"{mark:>9.2f}{pnl:>+9.2f}  {stop}")
+        else:
+            lines += ["", "no open positions"]
+        flags = [f for f, on in (("HALTED", self.book.halted), ("FROZEN", self.book.frozen)) if on]
+        if self.book.paused_sleeves:
+            flags.append(f"paused: {', '.join(self.book.paused_sleeves)}")
+        if flags:
+            lines += ["", "⚠ " + " · ".join(flags)]
+        body = "\n".join(lines)
         self.journal.record("daily_report", {"equity": snap.equity, "text": body})
-        self.alerter.info("daily report", body)
+        self.alerter.info(f"{mood} Daily report — {now.astimezone(self.tz):%a %b %d}", body)
 
     def _maybe_rebalance(self, now: datetime) -> None:
         local = now.astimezone(self.tz)

@@ -65,6 +65,13 @@ def require_secret(name: str) -> str:
 # ----------------------------------------------------------------------------- alerts
 
 
+_LEVEL_EMOJI = {"info": "ℹ️", "warning": "⚠️", "critical": "🚨"}
+
+
+def _html_escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 @dataclass(frozen=True)
 class Alert:
     level: Level
@@ -73,8 +80,17 @@ class Alert:
     ts: float = field(default_factory=time.time)
 
     def text(self) -> str:
-        tag = {"info": "ℹ️", "warning": "⚠️", "critical": "🚨"}[self.level]
+        tag = _LEVEL_EMOJI[self.level]
         return f"{tag} [{self.level.upper()}] {self.title}\n{self.body}".strip()
+
+    def html(self) -> str:
+        """Telegram HTML: bold title; multi-line bodies (tables/reports) go monospace so
+        columns line up on a phone."""
+        head = f"<b>{_LEVEL_EMOJI[self.level]} {_html_escape(self.title)}</b>"
+        if not self.body:
+            return head
+        body = _html_escape(self.body.strip())
+        return f"{head}\n<pre>{body}</pre>" if "\n" in self.body else f"{head}\n{body}"
 
 
 class AlertSink(Protocol):
@@ -92,7 +108,8 @@ class TelegramSink:
         self._chat_id, self._timeout = chat_id, timeout_s
 
     def send(self, alert: Alert) -> None:
-        data = urllib.parse.urlencode({"chat_id": self._chat_id, "text": alert.text()[:4000]}).encode()
+        data = urllib.parse.urlencode({"chat_id": self._chat_id, "parse_mode": "HTML",
+                                       "text": alert.html()[:4000]}).encode()
         req = urllib.request.Request(self._url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=self._timeout) as resp:
             if resp.status != 200:
