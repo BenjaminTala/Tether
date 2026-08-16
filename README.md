@@ -129,6 +129,14 @@ awake then.
 * Change region/profile: `universe.profile: ucits` (verify each line in TWS first).
 * Sanity anytime: `ibagent validate --set capital.seed_usd=N`.
 
+## Adapting this repo for a NEW user
+
+Everything personal lives outside git: `data/` (book, capital ledger, journal, state) is
+gitignored and secrets sit in the OS credential store. A fresh clone needs only the
+personalization table in `CLAUDE.md` — account id, commission plan, seed, region profile,
+alert channel — then the same GO-LIVE steps below. Claude Code picks up `CLAUDE.md`
+automatically and can walk you through it: start with "set me up as a new user".
+
 ## GO-LIVE (paper) — the only steps left, all yours
 
 The code is complete and tested (197 tests). Do these once, in order, from the repo root with
