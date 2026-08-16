@@ -21,8 +21,14 @@ def mandate_dict():
 
 @pytest.fixture
 def md(mandate_dict):
-    """Fresh deep copy per test so tests can mutate freely."""
-    return copy.deepcopy(mandate_dict)
+    """Fresh deep copy per test, with the capital knobs PINNED to the values the tests were
+    written against — user tuning of mandate.yaml (e.g. fixed-pricing floors) must not move
+    the goalposts of the engine tests."""
+    d = copy.deepcopy(mandate_dict)
+    d["capital"]["commission_model"] = "tiered"
+    d["capital"]["min_position_usd"] = 100
+    d["account"]["ibkr_account_id"] = ""
+    return d
 
 
 @pytest.fixture

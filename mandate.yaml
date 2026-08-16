@@ -12,10 +12,13 @@ base_currency: USD
 capital:
   seed_usd: 1000                # initial pot; override at init: ibagent capital init --seed 2500
   min_operating_equity_usd: 400 # below this the engine goes core-only, no trend/spec entries, alerts
-  min_position_usd: 100         # derived: max_positions(sleeve) = min(cap, floor(sleeve_equity / this))
+  min_position_usd: 150         # derived: max_positions(sleeve) = min(cap, floor(sleeve_equity / this))
+                                # 150 (not 100) while commission_model is fixed: $1 min/order must stay
+                                # under max_fee_pct_per_trade. Drop back to 100 if you switch to tiered.
   min_order_usd: 25             # never send smaller orders (dust)
   max_fee_pct_per_trade: 0.75   # est. commission / order notional (percent); reject above
-  commission_model: tiered      # tiered | fixed | lite  (fee estimator only; Fixed = $1 min/order)
+  commission_model: fixed       # tiered | fixed | lite — matches the account's Fixed Rate plan.
+                                # RECOMMENDED: switch the account to Tiered (~$0.35/order) and set tiered.
 
 account:
   ibkr_account_id: "DUR907051"  # paper account (live U-account goes here only at go-live)
