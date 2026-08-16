@@ -1,0 +1,98 @@
+from datetime import datetime, timedelta, timezone
+
+from ibagent.config import EventCfg
+from ibagent.news.ingest import NewsItem, NewsStore, parse_feed, poll
+from ibagent.news.scoring import (EventGateState, build_digest, check_event_gate, score_items)
+
+NOW = datetime(2026, 8, 12, 15, 0, tzinfo=timezone.utc)
+
+RSS = b"""<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Test feed</title>
+<item><title>Apple beats estimates, raises guidance</title>
+  <link>https://x.test/apple-q3</link>
+  <description>AAPL quarterly results top expectations</description>
+  <pubDate>Wed, 12 Aug 2026 13:00:00 GMT</pubDate></item>
+<item><title>Fed holds rates, signals September cut</title>
+  <link>https://x.test/fomc</link><description>FOMC decision</description>
+  <pubDate>Wed, 12 Aug 2026 14:00:00 GMT</pubDate></item>
+<item><title>Quiet day in markets</title>
+  <link>https://x.test/quiet</link><description>Nothing much happened</description>
+  <pubDate>Wed, 12 Aug 2026 12:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+
+def items():
+    return parse_feed("https://feed.test/rss", RSS, NOW)
+
+
+def test_parse_feed_and_dedupe(tmp_path):
+    got = items()
+    assert len(got) == 3 and got[0].title.startswith("Apple")
+    seen = set()
+    first = poll(["u"], seen, fetcher=lambda u: RSS, now=NOW)
+    again = poll(["u"], seen, fetcher=lambda u: RSS, now=NOW)
+    assert len(first) == 3 and again == []
+    store = NewsStore(tmp_path / "news.json")
+    store.seen = seen
+    store.add(first)
+    store.save()
+    store2 = NewsStore(tmp_path / "news.json")
+    assert len(store2.items) == 3 and store2.seen == seen
+    assert len(store2.recent(4, NOW)) == 3
+    assert len(store2.recent(2.5, NOW)) == 2               # the 12:00 item ages out
+    assert len(store2.recent(0.5, NOW)) == 0
+
+
+def test_dead_feed_is_skipped():
+    def fetcher(url):
+        raise OSError("down")
+    assert poll(["u"], set(), fetcher=fetcher, now=NOW) == []
+
+
+def test_scoring_tags_symbols_and_weights():
+    scored = score_items(items(), ["AAPL", "MSFT"])
+    apple = next(s for s in scored if "apple-q3" in s.item.link)
+    assert "AAPL" in apple.symbols and apple.score >= 0.7   # earnings + guidance keywords
+    fomc = next(s for s in scored if "fomc" in s.item.link)
+    assert fomc.symbols == () and 0 < fomc.score < apple.score
+    quiet = next(s for s in scored if "quiet" in s.item.link)
+    assert quiet.score == 0.0
+
+
+def test_digest_sections():
+    scored = score_items(items(), ["AAPL"])
+    md = build_digest(scored, held={"AAPL"}, watched=set())
+    assert "UNTRUSTED" in md and "Held / watched" in md and "Macro" in md
+    assert "Apple beats" in md and "Quiet day" not in md
+
+
+def gate_cfg(**kw):
+    base = dict(max_per_day=2, cooldown_minutes=120, min_materiality=0.7, min_abs_move_pct=0.03)
+    base.update(kw)
+    return EventCfg(**base)
+
+
+def test_event_gate_fires_and_respects_budget():
+    scored = score_items(items(), ["AAPL"])
+    state = EventGateState()
+    t = check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW)
+    assert t is not None and t.symbol == "AAPL" and state.count_today == 1
+    # cooldown blocks an immediate second fire
+    assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW) is None
+    # after cooldown, budget allows one more, then exhausted
+    later = NOW + timedelta(hours=3)
+    assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, later)
+    even_later = NOW + timedelta(hours=7)
+    assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, even_later) is None
+    # new day resets the counter
+    tomorrow = NOW + timedelta(days=1)
+    assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, tomorrow)
+
+
+def test_event_gate_requires_move_and_holding():
+    scored = score_items(items(), ["AAPL"])
+    st = EventGateState()
+    assert check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.01}, NOW) is None
+    assert check_event_gate(gate_cfg(), st, scored, {"MSFT"}, set(), {"AAPL": -0.05}, NOW) is None
+    # watched (not held) symbols count
+    assert check_event_gate(gate_cfg(), st, scored, set(), {"AAPL"}, {"AAPL": 0.05}, NOW)

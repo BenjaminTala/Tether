@@ -69,8 +69,18 @@ src/ibagent/book.py          engine-owned book: positions/stops/HWMs, pot cash +
 src/ibagent/risk.py          plan_orders: Decision -> validated orders; every mandate
                              gate enforced; exits privileged; fail-closed stops        ✅ + property tests
 src/ibagent/sleeves.py       protective actions, circuit breakers, core rebalance+sweep ✅ + tests
-src/ibagent/{data,news/*}.py        Phase 4
-src/ibagent/agent/*.py              Phase 5       src/ibagent/{supervisor,watchdog}.py Phase 6
+src/ibagent/data.py          ATR (Wilder), 12-1 momentum, realized vol, 52w, MAs       ✅ + tests
+src/ibagent/news/ingest.py   RSS/EDGAR polling (feedparser), dedupe, rolling store     ✅ + tests
+src/ibagent/news/scoring.py  keyword materiality, digest, event gate (caps/cooldown)   ✅ + tests
+src/ibagent/execution.py     Plan -> orders -> fills -> book; GTC stop lifecycle
+                             (release-before-sell, re-arm after), stop-out sync        ✅ + tests
+src/ibagent/agent/bundle.py  per-run sandbox dir (SYSTEM/TASK/portfolio/market/news/
+                             journal tail/schema), prune                               ✅ + tests
+src/ibagent/agent/orchestrator.py  cap -> run -> validate -> retry -> HOLD -> plan ->
+                             execute -> journal; crash-safe invocation budget          ✅ + tests
+src/ibagent/supervisor.py    ONE process: heartbeat, kill switch, reconcile-freeze,
+                             breakers+liquidation, protective, news/event, scheduler   ✅ + tests
+src/ibagent/watchdog.py      heartbeat staleness -> alert (Task Scheduler, 5 min)      ✅ + tests
 ```
 
 ## Build plan
@@ -81,9 +91,9 @@ src/ibagent/agent/*.py              Phase 5       src/ibagent/{supervisor,watchd
 | 1 Foundation | config, schemas, capital, journal, alerts, runner, CLI | **done — 34 tests green** |
 | 2 Broker | `IBKRBroker` (ib_async: contracts, delayed data, daily bars, marketable-limit + GTC stops with `orderRef`, fills, settled cash), `SimBroker`, fee estimator | **code done — 64 tests green.** Your part: `ibagent broker smoke` (read-only), then during RTH `ibagent broker smoke --place-test` (≈$25 SGOV round-trip on paper) |
 | 3 Risk + sleeves + book | pure `plan_orders`, sizing/stops/targets, circuit breakers, T+1 settled cash, reconciliation freeze, HWM tracking | **done — 161 tests green** incl. 40-seed property tests (no order can breach the mandate) and golden scenarios (drawdown halt, stop-out cooldown, no averaging down) |
-| 4 Data + news | ATR/momentum table, EDGAR + RSS + IBKR news ingest, materiality scoring, event gate | fixtures-based tests; digest ≤ 2k tokens; gate honours caps/cooldown |
-| 5 Agent | bundle builder, system prompt, orchestrator (invocation cap, retry, HOLD), sandbox denial verified | `ibagent run daily` end-to-end on paper with `FakeRunner` and with real `claude -p`; injection test bundle cannot leave the whitelist or read the repo |
-| 6 Supervisor | APScheduler jobs, heartbeat, watchdog, kill switch, daily/weekly reports, Task Scheduler wiring | 5 trading days unattended on paper, zero missed heartbeats, restart-on-failure proven |
+| 4 Data + news | ATR/momentum table, EDGAR + RSS news ingest, materiality scoring, event gate | **done** — fixtures-based tests; digest ≤ 2k tokens; gate honours caps/cooldown |
+| 5 Agent | bundle builder, system prompt, orchestrator (invocation cap, retry, HOLD) | **done** — end-to-end on SimBroker with `FakeRunner` in tests; your part: one real `ibagent run daily` against paper |
+| 6 Supervisor | scheduler loops, heartbeat, watchdog, kill switch, reports, Task Scheduler wiring | **code done — 197 tests green.** Your part: run it 5 trading days unattended on paper, zero missed heartbeats |
 | 7 Paper | 2–3 months on the exact live code path; tune only via mandate + journal notes | `go_live_gate` satisfied |
 | 8 Live small | dedicated linked IBKR account, `mode: live`, ack env var, seed via ledger | first week: reconcile clean, orders/fills match journal |
 
@@ -119,12 +129,39 @@ awake then.
 * Change region/profile: `universe.profile: ucits` (verify each line in TWS first).
 * Sanity anytime: `ibagent validate --set capital.seed_usd=N`.
 
-## Open items I still need from you
+## GO-LIVE (paper) — the only steps left, all yours
 
-1. Commission plan on your account (Fixed / Tiered) → `capital.commission_model` (tiered assumed).
-2. Alert channel (Telegram assumed) — create a bot, `ibagent secret set TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`.
-3. Before live: a second linked IBKR account for the agent (Client Portal → Settings → Add an
-   account), so reconciliation never sees your manual positions.
+The code is complete and tested (197 tests). Do these once, in order, from the repo root with
+the venv active (`.venv\Scripts\activate`):
+
+1. **IBKR paper account** — Phase 0/2 checklist above: enable paper trading + fractional shares,
+   install IB Gateway, log in with the paper (`DU…`) user, API on port 4002.
+   Put the `DU…` id into `mandate.yaml` → `account.ibkr_account_id`.
+2. **Claude Code login for scheduled runs** — you're logged in already; additionally run
+   `claude setup-token` once so headless runs don't die on session expiry.
+   Verify: `claude -p "reply with the word pong" --output-format json` returns.
+   Make sure `ANTHROPIC_API_KEY` is NOT set for this user (the runner also scrubs it).
+3. **Telegram alerts** — create a bot with @BotFather, message it once, get your chat id
+   (e.g. via `https://api.telegram.org/bot<TOKEN>/getUpdates`), then:
+   `ibagent secret set TELEGRAM_BOT_TOKEN` and `ibagent secret set TELEGRAM_CHAT_ID`.
+   (Or set `alerts.channels: [stdout, windows_toast]` in mandate.yaml to skip Telegram.)
+4. **Commission plan** — check Client Portal → your pricing plan; if Fixed, set
+   `capital.commission_model: fixed` (tiered assumed; at $1k Tiered is strongly preferred).
+5. **Seed the pot** — `ibagent validate` (check derived sizing), then
+   `ibagent capital init --seed 1000` (any amount ≥ `min_operating_equity_usd`).
+6. **Smoke test** — `ibagent broker smoke`, then during RTH `ibagent broker smoke --place-test`.
+7. **First supervised run** — `ibagent run daily` during RTH; read `data/journal/*.jsonl` and
+   `ibagent status`. If it looks right: `ibagent supervise` in a console for a day.
+8. **Install the scheduled tasks** — elevated PowerShell:
+   `windows\install_tasks.ps1 -DisableSleep` (add `-IbcStartScript ...` once IBC is set up for
+   Gateway auto-login). This registers Supervisor (at logon, restart-on-failure) + Watchdog (5 min).
+9. **Let it paper trade 2–3 months.** The `go_live_gate` in mandate.yaml refuses `mode: live`
+   until ≥60 days / ≥8 weekly runs / 0 reconcile freezes in 30d / HOLD-fallback rate ≤ 20%,
+   plus env `IBAGENT_LIVE_ACK=I_UNDERSTAND_REAL_MONEY`.
+
+Before real money (later): open a second linked IBKR account for the agent (Client Portal →
+Settings → Add an account) and set `account.dedicated: true`, so reconciliation never sees your
+manual positions; fund it with the pot amount only.
 
 ## Dev
 

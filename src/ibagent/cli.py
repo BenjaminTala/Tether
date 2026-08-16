@@ -6,9 +6,10 @@
   ibagent kill | unkill                # kill switch file
   ibagent secret set NAME              # store a secret in the OS credential store (prompted)
   ibagent broker smoke [--place-test] [--symbol SGOV] [--qty 0.25]   # Phase 2 exit check
-  ibagent run weekly|daily|event       # Phase 5
-  ibagent supervise                    # Phase 6
-  ibagent watchdog                     # Phase 6
+  ibagent run weekly|daily|event       # one agent cycle now
+  ibagent supervise                    # the long-running engine (Task Scheduler at logon)
+  ibagent watchdog                     # heartbeat check (Task Scheduler every 5 min)
+  ibagent status                       # print the engine book without touching the broker
 """
 from __future__ import annotations
 
@@ -157,9 +158,70 @@ def cmd_broker_smoke(args: argparse.Namespace) -> int:
         b.disconnect()
 
 
-def _not_yet(phase: str) -> int:
-    print(f"not available yet: implemented in {phase}", file=sys.stderr)
-    return 2
+def _build_supervisor(m: Mandate):
+    from ibagent.broker.ibkr import IBKRBroker
+    from ibagent.supervisor import Supervisor
+    broker = IBKRBroker(m.broker, account_id=m.account.ibkr_account_id, base_currency=m.base_currency)
+    return Supervisor(m, broker)
+
+
+def _live_gate(m: Mandate) -> None:
+    import os
+    if m.mode == "live" and os.environ.get(m.go_live_gate.ack_env_var) != m.go_live_gate.ack_value:
+        raise RuntimeError(f"live mode requires env {m.go_live_gate.ack_env_var}="
+                           f"{m.go_live_gate.ack_value} (go_live_gate)")
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    m = _load(args)
+    _live_gate(m)
+    sup = _build_supervisor(m)
+    try:
+        sup.run_agent_once(args.run_type)
+    finally:
+        try:
+            sup.broker.disconnect()
+        except Exception:
+            pass
+    print(f"{args.run_type} run complete; see data/journal for the decision and orders")
+    return 0
+
+
+def cmd_supervise(args: argparse.Namespace) -> int:
+    m = _load(args)
+    _live_gate(m)
+    sup = _build_supervisor(m)
+    sup.run()
+    return 0
+
+
+def cmd_watchdog(args: argparse.Namespace) -> int:
+    from ibagent.watchdog import main as watchdog_main
+    return watchdog_main(_load(args))
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    from ibagent.book import Book
+    book = Book.load(Path("data") / "book.json")
+    print(f"pot cash ${book.pot_cash:,.2f}  contributions ${book.net_contributions:,.2f}  "
+          f"pending withdrawal ${book.pending_withdrawal_usd:,.2f}")
+    print(f"realized P&L {book.realized_pnl}  HWM {book.hwm}")
+    flags = []
+    if book.halted:
+        flags.append(f"HALTED: {book.halted_reason}")
+    if book.frozen:
+        flags.append(f"FROZEN: {book.frozen_reason}")
+    if book.paused_sleeves:
+        flags.append(f"paused: {book.paused_sleeves}")
+    if Path(_load(args).kill_switch.file).exists():
+        flags.append("KILL SWITCH ENGAGED")
+    print("state: " + ("; ".join(flags) if flags else "normal"))
+    if not book.positions:
+        print("no positions")
+    for p in sorted(book.positions.values(), key=lambda x: x.symbol):
+        print(f"  {p.symbol:<6} {p.sleeve:<5} qty={p.qty:g} avg={p.avg_cost:.2f} "
+              f"stop={p.stop_price} entered={p.entry_date}  {p.thesis[:60]}")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -192,10 +254,11 @@ def build_parser() -> argparse.ArgumentParser:
     sm.add_argument("--place-test", action="store_true", help="paper only: tiny marketable round-trip (RTH)")
     sm.add_argument("--symbol"); sm.add_argument("--qty", type=float)
 
-    run = sp("run", help="run one agent cycle now (Phase 5)")
+    run = sp("run", help="run one agent cycle now")
     run.add_argument("run_type", choices=["weekly", "daily", "event"])
-    sp("supervise", help="start the long-running supervisor (Phase 6)")
-    sp("watchdog", help="heartbeat watchdog, run by Task Scheduler (Phase 6)")
+    sp("supervise", help="start the long-running supervisor")
+    sp("watchdog", help="heartbeat watchdog, run by Task Scheduler")
+    sp("status", help="print the engine book (no broker connection)")
     return p
 
 
@@ -217,11 +280,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.cmd == "broker":
             return cmd_broker_smoke(args)
         if args.cmd == "run":
-            return _not_yet("Phase 5 (agent/orchestrator.py)")
+            return cmd_run(args)
         if args.cmd == "supervise":
-            return _not_yet("Phase 6 (supervisor.py)")
+            return cmd_supervise(args)
         if args.cmd == "watchdog":
-            return _not_yet("Phase 6 (watchdog.py)")
+            return cmd_watchdog(args)
+        if args.cmd == "status":
+            return cmd_status(args)
     except (MandateError, LedgerError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
