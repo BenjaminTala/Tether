@@ -62,8 +62,14 @@ src/ibagent/broker/base.py   Broker Protocol + value types                      
 src/ibagent/broker/ibkr.py   IBKRBroker over ib_async (quotes, bars, orders, fills)      ✅ helpers tested
 src/ibagent/broker/sim.py    SimBroker: fills/stops/commissions/T+1 settled cash         ✅ + tests
 src/ibagent/fees.py          IBKR commission estimator (tiered/fixed/lite)              ✅ + tests
-src/ibagent/marketclock.py   business-day helpers (NYSE holidays arrive in Phase 3)     ✅
-src/ibagent/{book,risk,sleeves}.py  Phase 3       src/ibagent/{data,news/*}.py     Phase 4
+src/ibagent/marketclock.py   NYSE calendar: rule-based holidays, early closes, RTH,
+                             trading-day math, T+1 settlement dates                    ✅ + tests
+src/ibagent/book.py          engine-owned book: positions/stops/HWMs, pot cash + T+1,
+                             freeze/halt/pauses, reconcile (shared & dedicated)        ✅ + tests
+src/ibagent/risk.py          plan_orders: Decision -> validated orders; every mandate
+                             gate enforced; exits privileged; fail-closed stops        ✅ + property tests
+src/ibagent/sleeves.py       protective actions, circuit breakers, core rebalance+sweep ✅ + tests
+src/ibagent/{data,news/*}.py        Phase 4
 src/ibagent/agent/*.py              Phase 5       src/ibagent/{supervisor,watchdog}.py Phase 6
 ```
 
@@ -74,7 +80,7 @@ src/ibagent/agent/*.py              Phase 5       src/ibagent/{supervisor,watchd
 | 0 Workstation (you) | Paper account enabled; IB Gateway + API on (port 4002, 127.0.0.1); IBC installed; Python 3.12 venv; Claude Code native Windows install, logged in on Max, `claude setup-token`; Telegram bot; `install_tasks.ps1 -DisableSleep` | `ibagent validate` OK; `claude -p "ping" --output-format json` returns on the Max login; Gateway accepts a socket connection |
 | 1 Foundation | config, schemas, capital, journal, alerts, runner, CLI | **done — 34 tests green** |
 | 2 Broker | `IBKRBroker` (ib_async: contracts, delayed data, daily bars, marketable-limit + GTC stops with `orderRef`, fills, settled cash), `SimBroker`, fee estimator | **code done — 64 tests green.** Your part: `ibagent broker smoke` (read-only), then during RTH `ibagent broker smoke --place-test` (≈$25 SGOV round-trip on paper) |
-| 3 Risk + sleeves + book | pure `plan_orders`, sizing/stops/targets, circuit breakers, T+1 settled cash, reconciliation freeze, HWM tracking | property tests: no order ever violates a mandate limit; golden scenarios (drawdown halt, stop-out cooldown, no averaging down) |
+| 3 Risk + sleeves + book | pure `plan_orders`, sizing/stops/targets, circuit breakers, T+1 settled cash, reconciliation freeze, HWM tracking | **done — 161 tests green** incl. 40-seed property tests (no order can breach the mandate) and golden scenarios (drawdown halt, stop-out cooldown, no averaging down) |
 | 4 Data + news | ATR/momentum table, EDGAR + RSS + IBKR news ingest, materiality scoring, event gate | fixtures-based tests; digest ≤ 2k tokens; gate honours caps/cooldown |
 | 5 Agent | bundle builder, system prompt, orchestrator (invocation cap, retry, HOLD), sandbox denial verified | `ibagent run daily` end-to-end on paper with `FakeRunner` and with real `claude -p`; injection test bundle cannot leave the whitelist or read the repo |
 | 6 Supervisor | APScheduler jobs, heartbeat, watchdog, kill switch, daily/weekly reports, Task Scheduler wiring | 5 trading days unattended on paper, zero missed heartbeats, restart-on-failure proven |
