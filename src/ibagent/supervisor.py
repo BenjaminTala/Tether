@@ -124,6 +124,15 @@ class Supervisor:
         if target > current + 0.005:
             amount = round(target - current, 2)
             self.book.apply_contribution(amount)
+            # A deposit is not profit: shift the P&L anchors so daily/weekly/monthly
+            # performance keeps measuring trading results only.
+            if self.book.day_start_equity > 0:
+                self.book.day_start_equity += amount
+            if self.book.week_start_equity > 0:
+                self.book.week_start_equity += amount
+            if self.book.month_start_equity > 0:
+                self.book.month_start_equity += amount
+            self.book.hwm["total"] += amount
             self.journal.record("capital_sync", {"kind": "contribution", "amount": amount})
             self.alerter.info("capital added to pot", f"${amount:,.2f} now deployable")
             changed = True

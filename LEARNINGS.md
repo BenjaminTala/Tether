@@ -1,5 +1,33 @@
 # Live-session learnings
 
+## 2026-08-17 — day 1 wrap-up (after the close)
+
+- **Day 1 result: −$14.85 (−0.15%) on $10,000.** Two positions opened (SMH, BAC), both held
+  into the close with trailing stops at the broker; the loss is commissions (~$4) plus small
+  drift. BAC closed within 3% of its stop — tomorrow may open with an automatic exit.
+- **A deposit is not profit**: the $9k capital add polluted the day-P&L anchor and the close
+  report claimed "+8,985 $ (+898%) today". Fixed: capital syncs now shift the day/week/month
+  anchors and the HWM by the contribution, and the live book was repaired. *Open: do the
+  mirror-image adjustment when withdrawals are paid out.*
+- **Anchor pollution also silently disabled the weekly/monthly drawdown breakers** (anchored
+  at $1,000 while equity was $10,000 — a 90% cushion). Breakers that depend on anchors need
+  the anchors to move with capital events; this class of bug is invisible until it matters.
+- **OneDrive is a hostile filesystem neighbor**: one tick died with PermissionError(13) —
+  almost certainly a sync lock on a data file during an atomic replace. Hardened with a
+  one-shot retry + tracebacks in the journal. If it recurs, move `data/` out of the synced
+  tree (or exclude it from OneDrive).
+- **Claude usage measured (the user's month-length question):** today's 4 engine runs
+  (3 weekly + 1 daily; the weeklies tripled by my bring-up re-runs) consumed ~17k output /
+  ~24 input tokens plus ~118k cached reads ≈ **$2.86 API-equivalent**. A normal operating
+  day is 1 daily (~$0.35) + occasional event runs; Mondays add one weekly (~$1). Projected
+  steady state: **roughly $12–20/month API-equivalent — a small fraction of a Max plan**,
+  which fits the design target of "a few short runs per day". Today's development
+  conversation cost far more than the engine, but that was one-time build work.
+- **The supervised-restart dance** (stop task → mutate → optionally manual run → start task)
+  was exercised four times today without ever having two writers. It works, but each restart
+  loses in-memory state like the bars cache; a `ibagent restart` command that does the dance
+  atomically would remove the human-error surface.
+
 Observations from real (paper) operation — friction, surprises, and what to change.
 Newest entries at the top. Maintained by Claude during supervised sessions; facts only,
 each entry actionable or explicitly closed.
