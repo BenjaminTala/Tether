@@ -133,6 +133,24 @@ def test_stop_loss_guard_locks_after_repeat_stopouts(mandate, tmp_path):
     assert book.in_cooldown("QQQ", TODAY + timedelta(days=35))  # 30 sessions >> the 5-session default
 
 
+# --------------------------------------------------------------------- whole-share mode
+
+def test_whole_share_mode_floors_or_rejects(md, tmp_path):
+    from ibagent.config import mandate_from_dict
+    md["broker"]["fractional_shares"] = False
+    md["capital"]["min_position_usd"] = 90
+    m = mandate_from_dict(md)
+    b = make_book(tmp_path, 1000)
+    quotes = {"XLF": make_quote("XLF", 50), "NVDA": make_quote("NVDA", 800)}
+    d = rebalance(intent("XLF", "trend", 0.12, stop=46), intent("NVDA", "trend", 0.12, stop=736))
+    plan = plan_orders(m, b, quotes, {}, d, NOW)
+    # XLF: risk $10 / $4 stop distance = 2.5 -> floored to 2 whole shares ($100 >= $90 floor)
+    xlf = [o for o in plan.orders if o.req.symbol == "XLF"]
+    assert len(xlf) == 1 and xlf[0].req.qty == 2.0
+    # NVDA: one share $800 exceeds the $120 position budget -> rejected, not rounded up
+    assert any(r.symbol == "NVDA" and "fractional" in r.reason for r in plan.rejections)
+
+
 # --------------------------------------------------------------------- persistence
 
 def test_new_state_survives_roundtrip(mandate, tmp_path):

@@ -28,6 +28,7 @@ def md(mandate_dict):
     d["capital"]["commission_model"] = "tiered"
     d["capital"]["min_position_usd"] = 100
     d["account"]["ibkr_account_id"] = ""
+    d["broker"]["fractional_shares"] = True
     return d
 
 

@@ -116,6 +116,10 @@ class Executor:
                 report.errors.append(f"{a.symbol}: no usable quote for {a.kind}")
                 continue
             qty = min(pos.qty, a.sell_qty)
+            if not self.m.broker.fractional_shares and qty < pos.qty:
+                qty = float(int(qty))                     # partial sells: whole shares only
+                if qty < 1:
+                    continue                              # position too small to partial; stop still protects
             tag = f"p{today.isoformat()}-{a.symbol}-{a.kind[:4].upper()}"
             self._release_stop(a.symbol)
             outcome, fills = self._place_and_wait(OrderRequest(
@@ -149,6 +153,12 @@ class Executor:
                 report.errors.append(f"{it.symbol}: no usable quote for rebalance")
                 continue
             qty = round(it.usd / mark, QTY_DP)
+            if not self.m.broker.fractional_shares:
+                qty = float(int(qty))
+                if qty < 1:
+                    report.errors.append(f"{it.symbol}: needs fractional shares "
+                                         f"(1 share = {mark:.0f} > {it.usd:.0f} target)")
+                    continue
             pos = self.book.positions.get(it.symbol)
             if it.side == "SELL":
                 qty = min(qty, pos.qty if pos else 0.0)

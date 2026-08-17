@@ -314,6 +314,18 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
                 plan.rejections.append(Rejection(
                     p.symbol, what, f"size {notional:.0f} below {floor:.0f} even at hard-cap risk"))
                 continue
+        if not mandate.broker.fractional_shares:
+            # broker/account rejects fractional API orders: whole shares only, fail closed
+            qty = float(int(qty))
+            notional = qty * price
+            if qty < 1:
+                plan.rejections.append(Rejection(
+                    p.symbol, what, f"needs fractional shares (1 share = {price:.0f} > budget)"))
+                continue
+            if notional < floor:
+                plan.rejections.append(Rejection(
+                    p.symbol, what, f"whole-share size {notional:.0f} below {floor:.0f}"))
+                continue
         qty = round(qty, QTY_DP)
         notional = qty * price
 

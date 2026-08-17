@@ -30,7 +30,10 @@ broker:
   port: 4002                    # 4002 Gateway paper | 4001 Gateway live | 7497 TWS paper | 7496 TWS live
   client_id: 17
   market_data_type: 3           # 1 live, 3 delayed (free), 4 delayed-frozen
-  fractional_shares: true
+  fractional_shares: false      # 2026-08-17: API rejected fractional (error 10243). Engine floors
+                                # to whole shares meanwhile. Set true again once BOTH are done:
+                                # Gateway: API settings -> "Support fractional share size for orders"
+                                # Client Portal: Trading Permissions -> Fractional Shares
   connect_timeout_s: 20
 
 universe:
