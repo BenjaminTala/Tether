@@ -29,6 +29,8 @@ def md(mandate_dict):
     d["capital"]["min_position_usd"] = 100
     d["account"]["ibkr_account_id"] = ""
     d["broker"]["fractional_shares"] = True
+    d["risk"]["max_position_weight_pct"] = {"core": 0.35, "trend": 0.12, "spec": 0.06}
+    d["execution"]["limit_offset_bps"] = 15
     return d
 
 

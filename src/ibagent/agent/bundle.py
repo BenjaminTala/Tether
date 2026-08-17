@@ -100,7 +100,7 @@ Reply with the decision JSON only.""",
 }
 
 
-def mandate_excerpt(m: Mandate) -> str:
+def mandate_excerpt(m: Mandate, equity: float = 0.0) -> str:
     prof = m.universe.active
     lines = [
         "# Mandate excerpt (informational — every limit is enforced by code)",
@@ -110,6 +110,30 @@ def mandate_excerpt(m: Mandate) -> str:
         "(fewer when the pot is small)",
         f"- per-position weight caps: trend {m.risk.max_position_weight_pct['trend']:.0%}, "
         f"spec {m.risk.max_position_weight_pct['spec']:.0%} of pot equity",
+    ]
+    if equity > 0:
+        # The binding constraint at small pots is the USD floor, not the % cap. Give the model
+        # the EFFECTIVE per-position weight window at today's equity so its weights can pass.
+        lines += [f"- SIZING AT CURRENT EQUITY (${equity:,.0f}) — a position's target_weight "
+                  f"must land its dollar size inside these windows or it will be REJECTED:"]
+        for s in ("trend", "spec"):
+            lo = m.capital.min_position_usd
+            hi = m.position_cap_usd(s, equity)
+            if hi < lo:
+                lines.append(f"  - {s}: NO valid size at this equity (floor ${lo:.0f} > cap ${hi:.0f}) "
+                             "— do not propose entries in this sleeve")
+            else:
+                max_stop_dist = m.per_trade_risk_usd(s, equity, hard_cap=True) / lo
+                lines.append(f"  - {s}: ${lo:.0f}–${hi:.0f} per position "
+                             f"(target_weight {lo / equity:.2f}–{hi / equity:.2f}); "
+                             f"max {m.max_positions(s, equity)} position(s); stop distance must be "
+                             f"<= {max_stop_dist:.0%} of entry or risk-based sizing cannot reach the floor")
+    if not m.broker.fractional_shares:
+        lines += ["- WHOLE SHARES ONLY (fractional orders are disabled): quantities are rounded",
+                  "  DOWN to whole shares, so a whole number of shares must fit inside the dollar",
+                  "  window above. Skip symbols whose share price alone exceeds the window top;",
+                  "  prefer lower-priced symbols where 2-3 shares land inside the window."]
+    lines += [
         f"- risk per trade: trend {m.risk.per_trade_risk_pct['trend']:.2%}, "
         f"spec {m.risk.per_trade_risk_pct['spec']:.2%}; total open risk <= {m.risk.max_total_open_risk_pct:.0%}",
         f"- stop distance bounds: {m.risk.stops.min_distance_pct:.0%} .. trend "
@@ -177,7 +201,7 @@ def build_bundle(m: Mandate, book: Book, snap: EquitySnapshot, stats: Dict[str, 
     (bundle_dir / "SYSTEM.md").write_text(SYSTEM_MD, encoding="utf-8")
     task = TASKS[run_type]
     (bundle_dir / "TASK.md").write_text(task, encoding="utf-8")
-    (bundle_dir / "mandate_excerpt.md").write_text(mandate_excerpt(m), encoding="utf-8")
+    (bundle_dir / "mandate_excerpt.md").write_text(mandate_excerpt(m, snap.equity), encoding="utf-8")
     (bundle_dir / "portfolio.json").write_text(
         json.dumps(portfolio_json(book, snap, m), indent=1), encoding="utf-8")
     (bundle_dir / "market.json").write_text(
