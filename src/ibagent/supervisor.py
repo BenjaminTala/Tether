@@ -463,16 +463,26 @@ class Supervisor:
         except Exception:
             return                                            # missing marks: skip the pulse quietly
         day_pnl = snap.equity - self.book.day_start_equity if self.book.day_start_equity else 0.0
-        lines = [f"Equity ${snap.equity:,.2f}   today {day_pnl:+,.2f} $   cash ${snap.pot_cash:,.2f}"]
-        for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
-            mark = prices.get(p.symbol, p.avg_cost)
-            pnl = (mark - p.avg_cost) * p.qty
-            lines.append(f"{p.symbol:<5} {p.qty:g} @ {p.avg_cost:,.2f} -> {mark:,.2f}  "
-                         f"{pnl:+,.2f} $  (stop {p.stop_price:,.2f})" if p.stop_price else
-                         f"{p.symbol:<5} {p.qty:g} @ {p.avg_cost:,.2f} -> {mark:,.2f}  {pnl:+,.2f} $")
-        if not self.book.positions:
-            lines.append("no open positions — waiting for the next signal")
-        self.alerter.info(f"📊 {now.astimezone(self.tz):%H:%M} update", "\n".join(lines), dedupe=False)
+        day_pct = day_pnl / self.book.day_start_equity if self.book.day_start_equity else 0.0
+        total_pnl = snap.equity - self.book.net_contributions
+        total_pct = total_pnl / self.book.net_contributions if self.book.net_contributions > 0 else 0.0
+        mood = "📈" if day_pnl >= 0 else "📉"
+        lines = [
+            f"P&L today:     {day_pnl:+,.2f} $  ({day_pct:+.2%})",
+            f"P&L all-time:  {total_pnl:+,.2f} $  ({total_pct:+.2%})",
+            f"Equity ${snap.equity:,.2f} · cash ${snap.pot_cash:,.2f} · "
+            f"{len(self.book.positions)} position(s)",
+        ]
+        if self.book.positions:
+            lines += ["", f"{'SYM':<6}{'NOW':>9}{'P&L $':>9}{'P&L %':>8}   STOP"]
+            for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
+                mark = prices.get(p.symbol, p.avg_cost)
+                pnl = (mark - p.avg_cost) * p.qty
+                pct = mark / p.avg_cost - 1.0 if p.avg_cost else 0.0
+                stop = f"{p.stop_price:,.2f}" if p.stop_price else "—"
+                lines.append(f"{p.symbol:<6}{mark:>9,.2f}{pnl:>+9.2f}{pct:>+8.1%}   {stop}")
+        self.alerter.info(f"{mood} {now.astimezone(self.tz):%H:%M} — {'up' if day_pnl >= 0 else 'down'} "
+                          f"{abs(day_pnl):,.2f} $ today", "\n".join(lines), dedupe=False)
 
     def _report_job(self, now: datetime) -> None:
         held = set(self.book.positions) | set(self.m.universe.active.core_holdings)
