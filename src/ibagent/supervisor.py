@@ -43,6 +43,7 @@ from ibagent.sleeves import core_rebalance, evaluate_breakers, protective_action
 DATA_DIR = Path("data")
 BARS_FOR_STATS = 300
 PROTECTIVE_MIN_SPACING_S = 900
+STATUS_UPDATE_SPACING_S = 7200          # intraday Telegram status every 2h during RTH
 
 
 @dataclass
@@ -53,6 +54,7 @@ class ScheduleState:
     last_rebalance_period: str = ""      # YYYY-MM (monthly) or ISO Monday (weekly)
     last_news_poll_ts: float = 0.0
     last_protective_ts: float = 0.0
+    last_status_ts: float = 0.0
     last_fill_sync: str = ""             # ISO datetime
     watchlist: List[str] = field(default_factory=list)
     event_gate: dict = field(default_factory=dict)
@@ -339,6 +341,10 @@ class Supervisor:
                 and now.timestamp() - self.state.last_protective_ts >= PROTECTIVE_MIN_SPACING_S:
             self._protective_job(now, quotes)
 
+        if is_trading_day(today) and is_rth(now) \
+                and now.timestamp() - self.state.last_status_ts >= STATUS_UPDATE_SPACING_S:
+            self._status_update(now)
+
         weekday = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")[local.weekday()]
         if is_trading_day(today) and weekday == c.weekly_review.day \
                 and hhmm >= c.weekly_review.time and self.state.last_weekly != _monday(today):
@@ -436,6 +442,29 @@ class Supervisor:
         if run_type == "weekly":
             return held | core | {i.symbol for i in self.m.universe.active.instruments}
         return held | core | set(self.state.watchlist)
+
+    def _status_update(self, now: datetime) -> None:
+        """Short intraday Telegram pulse: equity, day P&L, open positions with live P&L."""
+        self.state.last_status_ts = now.timestamp()
+        self.state.save(self.data_dir / "schedule_state.json")
+        held = set(self.book.positions)
+        quotes = self._quotes(held) if held else {}
+        prices = {s: (q.mid or q.last) for s, q in quotes.items() if (q.mid or q.last)}
+        try:
+            snap = self.book.equity(prices, now)
+        except Exception:
+            return                                            # missing marks: skip the pulse quietly
+        day_pnl = snap.equity - self.book.day_start_equity if self.book.day_start_equity else 0.0
+        lines = [f"Equity ${snap.equity:,.2f}   today {day_pnl:+,.2f} $   cash ${snap.pot_cash:,.2f}"]
+        for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
+            mark = prices.get(p.symbol, p.avg_cost)
+            pnl = (mark - p.avg_cost) * p.qty
+            lines.append(f"{p.symbol:<5} {p.qty:g} @ {p.avg_cost:,.2f} -> {mark:,.2f}  "
+                         f"{pnl:+,.2f} $  (stop {p.stop_price:,.2f})" if p.stop_price else
+                         f"{p.symbol:<5} {p.qty:g} @ {p.avg_cost:,.2f} -> {mark:,.2f}  {pnl:+,.2f} $")
+        if not self.book.positions:
+            lines.append("no open positions — waiting for the next signal")
+        self.alerter.info(f"📊 {now.astimezone(self.tz):%H:%M} update", "\n".join(lines), dedupe=False)
 
     def _report_job(self, now: datetime) -> None:
         held = set(self.book.positions) | set(self.m.universe.active.core_holdings)

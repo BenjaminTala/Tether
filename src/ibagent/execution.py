@@ -283,14 +283,30 @@ class Executor:
             self.book.apply_fill(f, po.sleeve, self.m.execution.settlement_days,
                                  entry_meta=po.entry_meta or {}, counts_as_new=po.counts_as_new)
             self.journal.record("fill", _fill_payload(f, po.sleeve, po.reason))
+            self._notify_buy(f, po.sleeve, (po.entry_meta or {}).get("stop_price"),
+                             (po.entry_meta or {}).get("thesis", ""))
             return 0.0
         return self._apply_sell(f, po.sleeve, reason=po.reason)
+
+    def _notify_buy(self, f: Fill, sleeve: str, stop: Optional[float], thesis: str) -> None:
+        body = (f"{f.qty:g} shares @ ${f.price:,.2f} = ${f.qty * f.price:,.2f} "
+                f"({sleeve} sleeve, fee ${f.commission:.2f})")
+        if stop:
+            body += f"\nSafety exit set at ${stop:,.2f} ({(f.price - stop) / f.price:.1%} below)"
+        if thesis:
+            body += f"\nWhy: {thesis[:180]}"
+        self.alerter.info(f"🟢 Bought {f.symbol}", body, dedupe=False)
 
     def _apply_sell(self, f: Fill, sleeve: str, reason: str) -> float:
         pos = self.book.positions.get(f.symbol)
         old_tag = pos.stop_order_tag if pos else ""
         realized = self.book.apply_fill(f, sleeve, self.m.execution.settlement_days)
         self.journal.record("fill", {**_fill_payload(f, sleeve, reason), "realized": realized})
+        emoji = "💰" if realized > 0 else "🔻" if realized < 0 else "🔴"
+        self.alerter.info(f"{emoji} Sold {f.symbol}",
+                          f"{f.qty:g} shares @ ${f.price:,.2f} = ${f.qty * f.price:,.2f} "
+                          f"(fee ${f.commission:.2f})\nResult: {realized:+,.2f} $ on this sale"
+                          f"\nReason: {reason[:150]}", dedupe=False)
         if f.symbol not in self.book.positions:
             if old_tag:
                 self._cancel_stop_by_tag(old_tag)                # position gone: no orphan GTC stop

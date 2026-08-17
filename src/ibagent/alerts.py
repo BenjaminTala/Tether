@@ -146,10 +146,10 @@ class Alerter:
         self._last: Dict[tuple, float] = {}
         self.failures = 0
 
-    def send(self, level: Level, title: str, body: str = "") -> bool:
+    def send(self, level: Level, title: str, body: str = "", dedupe: bool = True) -> bool:
         alert = Alert(level=level, title=title, body=body)
         key = (level, title)
-        if level != "critical" and time.time() - self._last.get(key, 0.0) < self._dedupe_s:
+        if dedupe and level != "critical" and time.time() - self._last.get(key, 0.0) < self._dedupe_s:
             return False
         self._last[key] = time.time()
         delivered = False
@@ -162,7 +162,8 @@ class Alerter:
                 log.error("alert sink %s failed: %s", type(sink).__name__, exc)
         return delivered
 
-    def info(self, title: str, body: str = "") -> bool: return self.send("info", title, body)
+    def info(self, title: str, body: str = "", dedupe: bool = True) -> bool:
+        return self.send("info", title, body, dedupe=dedupe)
     def warning(self, title: str, body: str = "") -> bool: return self.send("warning", title, body)
     def critical(self, title: str, body: str = "") -> bool: return self.send("critical", title, body)
 
