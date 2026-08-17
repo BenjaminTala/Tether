@@ -151,7 +151,9 @@ class Supervisor:
             try:
                 self.tick(now)
             except Exception as exc:                      # a tick must never kill the process
-                self.journal.record("error", {"where": "tick", "err": repr(exc)})
+                import traceback
+                self.journal.record("error", {"where": "tick", "err": repr(exc),
+                                              "trace": traceback.format_exc()[-1500:]})
                 self.alerter.critical("supervisor tick failed", repr(exc)[:500])
             interval = self.m.cadence.fast_loop_seconds if is_rth(now) \
                 else self.m.cadence.slow_loop_seconds

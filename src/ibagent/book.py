@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -208,7 +209,13 @@ class Book:
                 json.dump(data, fh, indent=1)
                 fh.flush()
                 os.fsync(fh.fileno())
-            os.replace(tmp, self.path)
+            try:
+                os.replace(tmp, self.path)
+            except PermissionError:
+                # Windows: a sync/AV process (e.g. OneDrive) can hold the target briefly.
+                # One short retry; if it still fails, the caller's error path handles it.
+                time.sleep(0.5)
+                os.replace(tmp, self.path)
         except OSError:
             try:
                 os.unlink(tmp)
