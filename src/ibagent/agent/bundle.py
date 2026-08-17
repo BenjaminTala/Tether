@@ -80,22 +80,31 @@ TASKS: Dict[str, str] = {
 7. Update `watchlist` (symbols the news gate should watch).
 Reply with the decision JSON only.""",
     "daily": """\
-# Daily check (light)
+# Daily check + opportunity scan
 
 1. Compare each held position in portfolio.json against its invalidation condition and the
-   overnight items in news_digest.md.
-2. If a thesis is broken, exit it (action "rebalance" with the full remaining book) or
-   tighten its stop (`stop_updates`). Reducing risk is always allowed; adding new positions
-   should be rare on a daily run.
-3. Otherwise reply `action: "no_change"` — that is the expected outcome most days.
+   overnight items in news_digest.md. If a thesis is broken, exit it (action "rebalance"
+   with the full remaining book) or tighten its stop (`stop_updates`).
+2. OPPORTUNITY SCAN: if the digest or your research shows a concrete, fresh catalyst on a
+   whitelisted symbol (guidance change, major product/deal news, earnings reaction with
+   follow-through), you MAY open a position for it — spec sleeve for catalyst bets, trend
+   sleeve if it also ranks well on momentum. A good week has roughly 1-3 trades; a catalyst
+   strong enough to act on should be one you can state in one sentence with a falsifiable
+   invalidation. No catalyst, no trade: `action: "no_change"` remains the right answer on a
+   quiet day. Never trade just to be active — the weekly/turnover caps are enforced anyway.
+3. Remember the caps in mandate_excerpt.md; prefer one good entry over two mediocre ones.
 Reply with the decision JSON only.""",
     "event": """\
 # Event-triggered review
 
-EVENT.md describes why this run fired (material news + price move on a held/watched symbol).
-Judge ONLY whether this event breaks or materially strengthens an existing thesis, or opens a
-clearly better use of the affected sleeve. Do not rebalance unrelated positions. If the event
-does not change your book, reply `action: "no_change"`.
+EVENT.md describes why this run fired (material news + price move on a whitelisted symbol).
+Decide whether this event (a) breaks or strengthens an existing thesis -> adjust that
+position, or (b) is a tradable catalyst in its own right -> you MAY open a NEW spec-sleeve
+position on the affected symbol (or a trend entry if it also ranks on momentum), with a
+thesis tied to the event and an invalidation that says what would prove the market has
+already priced it in. Chasing a move that has already run >6-7% today is usually too late —
+say so and hold. Do not rebalance unrelated positions. If the event changes nothing, reply
+`action: "no_change"`.
 Reply with the decision JSON only.""",
 }
 

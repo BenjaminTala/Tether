@@ -210,7 +210,8 @@ cadence:                            # times in market_timezone
     max_per_day: 2
     cooldown_minutes: 120
     min_materiality: 0.70                    # news score threshold (news/scoring.py)
-    min_abs_move_pct: 0.03                   # AND price move on a held/watched symbol
+    min_abs_move_pct: 0.02                   # AND price move on the symbol (was 0.03; a real
+                                             # catalyst is often actionable before a 3% move)
   fast_loop_seconds: 60                      # RTH: reconcile, verify stops, kill switch, heartbeat
   slow_loop_seconds: 300                     # off-hours connectivity + heartbeat
   news_poll_seconds: 900

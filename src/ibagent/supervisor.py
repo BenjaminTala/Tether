@@ -374,8 +374,16 @@ class Supervisor:
         universe = [i.symbol for i in self.m.universe.active.instruments]
         self._scored_recent = score_items(self.news.recent(36, now), universe)
         held = set(self.book.positions)
-        watched = set(self.state.watchlist)
+        # Any whitelisted symbol carrying material news is watchable — catalysts should not
+        # need the model to have predicted them last week. The gate's materiality + price-move
+        # + budget/cooldown thresholds still decide whether a run actually fires.
+        mentioned = {sym for s in self._scored_recent
+                     if s.score >= self.m.cadence.event.min_materiality for sym in s.symbols}
+        watched = set(self.state.watchlist) | mentioned
         gate = EventGateState.from_dict(self.state.event_gate)
+        need_quotes = (held | watched) - set(quotes)
+        if need_quotes:
+            quotes = {**quotes, **self._quotes(need_quotes)}
         moves = self._day_moves(held | watched, quotes, now)
         trigger = check_event_gate(self.m.cadence.event, gate, self._scored_recent,
                                    held, watched, moves, now)
