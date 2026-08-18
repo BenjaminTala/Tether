@@ -565,10 +565,12 @@ class Supervisor:
         today = now.date().isoformat()
         if state.day != today:
             state.day, state.count = today, 0
-        if state.count >= self.m.llm.daily_invocation_cap:
-            self.alerter.info("💬 out of AI budget for today",
-                              f"the daily cap of {self.m.llm.daily_invocation_cap} runs is used up; "
-                              "commands like `status` still work", dedupe=False)
+        if state.count >= self.m.llm.daily_invocation_cap - 2:
+            # The last two slots belong to TRADING runs — chat must never starve them.
+            self.alerter.info("💬 out of chat budget for today",
+                              "I'm keeping the remaining AI runs for trading decisions. "
+                              "Commands still work instantly: status, pnl, positions, report.",
+                              dedupe=False)
             return
         state.count += 1
         state.runs_total += 1
