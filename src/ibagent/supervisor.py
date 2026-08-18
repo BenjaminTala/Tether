@@ -516,10 +516,16 @@ class Supervisor:
         token, chat = get_secret("TELEGRAM_BOT_TOKEN"), get_secret("TELEGRAM_CHAT_ID")
         if not token or not chat:
             return
-        offset, texts = tg_poll(token, chat, self.state.telegram_offset)
+        offset, texts, unreadable = tg_poll(token, chat, self.state.telegram_offset)
         if offset != self.state.telegram_offset:
             self.state.telegram_offset = offset
             self.state.save(self.data_dir / "schedule_state.json")
+        if unreadable:
+            self.journal.record("telegram_skip", {"count": unreadable})
+            self.alerter.info("💬 I can only read typed text",
+                              f"received {unreadable} message(s) I can't read (photo, voice, "
+                              "sticker or edit). Please type your question as plain text.",
+                              dedupe=False)
         for text in texts:
             try:
                 self._handle_owner_message(text, now)

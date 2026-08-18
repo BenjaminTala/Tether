@@ -42,37 +42,47 @@ def default_fetcher(token: str, offset: int) -> bytes:
         return resp.read()
 
 
-def parse_updates(raw: bytes) -> List[InboundMessage]:
+def parse_updates(raw: bytes) -> Tuple[List[InboundMessage], List[int]]:
+    """Returns (text messages, update_ids that carried NO usable text — photos, voice notes,
+    stickers, captions-only media, etc.). Non-text updates must be surfaced, not vanished:
+    a swallowed message looks to the owner like a dead bot."""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return []
+        return [], []
     out: List[InboundMessage] = []
+    textless: List[int] = []
     for u in data.get("result", []):
-        msg = u.get("message") or {}
-        text = (msg.get("text") or "").strip()
-        chat = str((msg.get("chat") or {}).get("id", ""))
         uid = u.get("update_id")
-        if text and chat and isinstance(uid, int):
+        if not isinstance(uid, int):
+            continue
+        msg = u.get("message") or {}
+        text = (msg.get("text") or msg.get("caption") or "").strip()
+        chat = str((msg.get("chat") or {}).get("id", ""))
+        if text and chat:
             out.append(InboundMessage(update_id=uid, chat_id=chat, text=text))
-    return out
+        else:
+            textless.append(uid)
+    return out, textless
 
 
 def poll(token: str, owner_chat_id: str, offset: int,
-         fetcher: Callable[[str, int], bytes] = default_fetcher) -> Tuple[int, List[str]]:
-    """Fetch new messages. Returns (next_offset, texts_from_owner). Foreign-chat messages
-    advance the offset (so they are consumed) but are never returned or answered."""
+         fetcher: Callable[[str, int], bytes] = default_fetcher) -> Tuple[int, List[str], int]:
+    """Fetch new messages. Returns (next_offset, texts_from_owner, n_unreadable).
+    Foreign-chat messages advance the offset (consumed) but are never returned or answered."""
     try:
-        updates = parse_updates(fetcher(token, offset))
+        updates, textless = parse_updates(fetcher(token, offset))
     except Exception:
-        return offset, []                                  # network failure: try next tick
+        return offset, [], 0                               # network failure: try next tick
     next_offset = offset
     texts: List[str] = []
+    for uid in textless:
+        next_offset = max(next_offset, uid + 1)
     for m in updates:
         next_offset = max(next_offset, m.update_id + 1)
         if m.chat_id == str(owner_chat_id):
             texts.append(m.text)
-    return next_offset, texts
+    return next_offset, texts, len(textless)
 
 
 def classify(text: str) -> str:
