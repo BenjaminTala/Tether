@@ -1,5 +1,33 @@
 # Live-session learnings
 
+## 2026-08-18 — day 2: the scheduling-vs-market-hours bug family, and forcing the skills
+
+- **Every decision maker must run while the market can act on it.** Third instance of the
+  same bug class: weekly (08:00) and daily (08:45) runs decided BEFORE the open, so their
+  entry orders always died on the outside-RTH gate — today's daily proposed LLY+MRK and
+  filled 0/0. (Instances 1-2: core rebalance at 16:20, after the close.) All decision runs
+  now execute inside RTH (weekly MON 09:45, daily 09:50, rebalance 10:00-15:30). Rule for
+  the future: any component that produces orders must be scheduled inside the window where
+  orders can fill; "decide at dawn, trade at open" needs an order queue we don't have.
+- **Core deployed correctly under the fixed scheduler**: VTI 7 @ 379.98 + SGOV 19 @ 100.58
+  (~$4,600), completion verified by fills, monthly slot consumed properly.
+- **Skill application is now forced, three layers** (owner request): (1) anti-chasing from
+  the original brief finally CODE-enforced (reject entries >1.5 ATR above 20d MA);
+  (2) schema demands `skills_applied` naming the skill files worked through and a per-
+  position `entry_checklist` of Literal[True] attestations — a position the model cannot
+  attest cannot be submitted, and the engine re-verifies the objective claims by arithmetic;
+  (3) runs refuse to start if skills/ is missing on disk. Honest residual: no code can force
+  *depth* of reading — the caps and checks bound the damage of shallow compliance.
+- **The model's own journal loop is working**: today's daily cited yesterday's unfilled LLY
+  order, diagnosed the tight limit on a wide-ATR name, and re-attempted deliberately — the
+  decision-journal skill behaving as designed.
+- **News stream densified** (owner request): poll every 5 min, 9 feeds (added MarketWatch
+  real-time, CNBC earnings+tech, Yahoo Finance), event cooldown 60 min, cap 3/day. X/Twitter
+  has no free API — viral catalysts reach the wires within minutes, which at 15-min delayed
+  data is the same trade. GameStop-style plays are bounded by the whitelist by DESIGN
+  (prompt-injection safety): a true off-list meme squeeze is not tradable; big-name
+  catalysts are. Expanding the whitelist is a human mandate edit, not an agent decision.
+
 ## 2026-08-17 — day 1 wrap-up (after the close)
 
 - **Day 1 result: −$14.85 (−0.15%) on $10,000.** Two positions opened (SMH, BAC), both held

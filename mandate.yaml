@@ -205,8 +205,9 @@ execution:
 
 cadence:                            # times in market_timezone
   market_timezone: America/New_York
-  weekly_review: {day: MON, time: "08:00"}   # deep Claude run; orders placed after the open window
-  daily_check:   {time: "08:45"}             # light Claude run: stops/thesis check, overnight news
+  weekly_review: {day: MON, time: "09:45"}   # deep Claude run INSIDE RTH: its orders can fill
+  daily_check:   {time: "09:50"}             # daily run inside RTH too (08:45 planned orders
+                                             # always died on the outside-RTH gate)
   daily_report:  {time: "16:20"}             # deterministic, no Claude
   event:                                     # event-triggered Claude runs (deterministic gate)
     max_per_day: 3
