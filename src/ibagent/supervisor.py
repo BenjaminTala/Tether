@@ -579,8 +579,12 @@ class Supervisor:
         runner = ClaudeCodeRunner(self.m.llm, schema_text=None)
         prompt = ("You are the assistant for the owner of this small trading system. "
                   "question.md is the owner's question; portfolio.json is the current book. "
-                  "Answer briefly and concretely (under 250 words, plain text, no markdown "
-                  "tables). Use WebSearch/WebFetch if the question needs current information. "
+                  "Use WebSearch/WebFetch if the question needs current information. "
+                  "FORMAT FOR A PHONE SCREEN, this is a Telegram chat: lead with the direct "
+                  "answer in one short sentence; then short bullet lines starting with '• '; "
+                  "blank line between topics; one idea per line; no paragraph longer than 2 "
+                  "sentences; no markdown symbols (no **, #, tables); under 150 words unless "
+                  "the question truly needs more. "
                   "You cannot trade or change anything - if asked to trade, explain that "
                   "decisions happen in the scheduled runs under the mandate.")
         res = runner.run(RunRequest(run_type="daily", bundle_dir=bundle_dir, prompt=prompt))
