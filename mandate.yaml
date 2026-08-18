@@ -228,7 +228,9 @@ llm:
   timeout_seconds: {weekly: 1800, daily: 900, event: 900}  # spend budget on decision quality)
   retries_on_invalid: 1             # re-prompt once with validation errors, then HOLD
   backoff_minutes_on_unavailable: [10, 30]
-  daily_invocation_cap: 8           # weekly + daily + events + Q&A, hard cap per calendar day
+  daily_invocation_cap: 40          # owner has ample Max headroom; this is now a RUNAWAY-BUG
+                                    # backstop, not a budget (real days use ~4-10). Q&A still
+                                    # leaves the last 2 slots for trading runs.
   tools: [Read, Grep, Glob, WebSearch, WebFetch]     # validator: read-only tools only
   permission_mode: dontAsk
   sandbox:
