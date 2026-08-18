@@ -583,7 +583,12 @@ class Supervisor:
         res = runner.run(RunRequest(run_type="daily", bundle_dir=bundle_dir, prompt=prompt))
         answer = (res.text or "").strip() or f"(no answer: {res.error})"
         self.journal.record("qa", {"question": question[:300], "ok": res.ok,
-                                   "duration_s": res.duration_s})
+                                   "duration_s": res.duration_s, "error": (res.error or "")[:400]})
+        if self.m.journal.keep_raw_llm_output and (res.raw_stdout or res.raw_stderr):
+            stamp = f"{now:%Y%m%d-%H%M%S}-qa"
+            self.journal.save_blob(f"{stamp}-stdout.txt", res.raw_stdout or "")
+            if res.raw_stderr:
+                self.journal.save_blob(f"{stamp}-stderr.txt", res.raw_stderr)
         self.alerter.info("💬 answer", answer[:3500], dedupe=False)
 
     def _report_job(self, now: datetime) -> None:

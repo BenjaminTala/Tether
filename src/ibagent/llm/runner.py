@@ -218,6 +218,7 @@ class ClaudeCodeRunner:
         cdir = bundle_dir / ".claude"
         cdir.mkdir(exist_ok=True)
         (cdir / "settings.json").write_text(json.dumps(sandbox_settings(self.cfg), indent=2), encoding="utf-8")
+        register_workspace_trust(bundle_dir)
 
     def run(self, req: RunRequest) -> RunResult:
         self.prepare_bundle(req.bundle_dir)
@@ -248,6 +249,35 @@ class ClaudeCodeRunner:
         res.duration_s = round(time.monotonic() - started, 2)
         res.cmd = cmd
         return res
+
+
+def register_workspace_trust(bundle_dir: Path, claude_json: Optional[Path] = None) -> bool:
+    """Mark the bundle as a trusted workspace in ~/.claude.json.
+
+    Without this, headless Claude Code IGNORES the bundle's .claude/settings.json — including
+    our deny rules — because the directory never saw an interactive trust dialog. Trusting it
+    is safe here: the engine authored every byte of the bundle. Best-effort: on any failure
+    the run still works via CLI flags; only the settings-file layer is lost."""
+    path = claude_json or (Path.home() / ".claude.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        if not isinstance(data, dict):
+            return False
+        projects = data.setdefault("projects", {})
+        key = str(bundle_dir.resolve()).replace("\\", "/")
+        entry = projects.get(key)
+        if not isinstance(entry, dict):
+            entry = {}
+        if entry.get("hasTrustDialogAccepted") is True:
+            return True
+        entry["hasTrustDialogAccepted"] = True
+        projects[key] = entry
+        tmp = path.with_suffix(".json.ibagent-tmp")
+        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        return True
+    except (OSError, json.JSONDecodeError):
+        return False
 
 
 class FakeRunner:
