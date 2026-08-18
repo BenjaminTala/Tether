@@ -23,11 +23,16 @@ def make_exec(mandate, tmp_path, cash=1000.0, sim_cash=None):
 
 
 def entry_decision(symbol="QQQ", weight=0.12, stop=92.0):
+    checklist = {"sized_in_window": True, "stop_within_bounds": True, "not_chasing": True,
+                 "basis": "trend"}
     return Decision(run_type="weekly", action="rebalance", market_regime="neutral",
                     risk_multiplier=1.0, notes_for_human="t",
+                    skills_applied=["market-regime", "trend-selection", "position-sizing",
+                                    "trade-management", "failure-modes"],
                     positions=[PositionIntent(symbol=symbol, sleeve="trend", target_weight=weight,
                                               thesis="momentum breakout hold", invalidation="close under 50d",
-                                              stop_price=stop, confidence=0.6, horizon_days=30)])
+                                              stop_price=stop, confidence=0.6, horizon_days=30,
+                                              entry_checklist=checklist)])
 
 
 def test_entry_fill_applies_to_book_and_places_gtc_stop(mandate, tmp_path):

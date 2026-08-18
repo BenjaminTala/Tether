@@ -4,18 +4,23 @@ import pytest
 
 from ibagent.schemas import DecisionError, decision_json_schema, hold_decision, parse_decision
 
+CHECKLIST = {"sized_in_window": True, "stop_within_bounds": True, "not_chasing": True,
+             "basis": "trend"}
 VALID = {
     "schema_version": 1, "run_type": "weekly", "action": "rebalance", "market_regime": "risk_on",
     "risk_multiplier": 1.0,
     "positions": [
         {"symbol": "aapl", "sleeve": "trend", "target_weight": 0.10, "thesis": "Momentum leader after earnings.",
          "invalidation": "Close below 50dma", "stop_price": 180.0, "target_price": 230.0, "confidence": 0.7,
-         "horizon_days": 40},
+         "horizon_days": 40, "entry_checklist": dict(CHECKLIST)},
         {"symbol": "XLE", "sleeve": "trend", "target_weight": 0.08, "thesis": "Energy relative strength persists.",
-         "invalidation": "Oil breaks $65", "confidence": 0.6, "horizon_days": 30},
+         "invalidation": "Oil breaks $65", "confidence": 0.6, "horizon_days": 30,
+         "entry_checklist": dict(CHECKLIST, basis="both")},
     ],
     "stop_updates": [{"symbol": "msft", "stop_price": 400.0, "reason": "trail after +2R"}],
     "watchlist": ["nvda", "NVDA", "SPY"],
+    "skills_applied": ["market-regime", "trend-selection", "position-sizing", "trade-management",
+                       "failure-modes", "news-analysis"],
     "notes_for_human": "Two trend entries; core untouched.",
     "journal_lessons": "Cut spec losers faster.",
 }
@@ -37,6 +42,10 @@ def test_valid_decision_normalises():
     (lambda d: d.update(run_type="daily"), "run_type must be 'weekly'"),
     (lambda d: d.update(extra_field=1), "Extra inputs"),
     (lambda d: d.update(risk_multiplier=1.5), "less than or equal to 1"),
+    (lambda d: d["positions"][0].pop("entry_checklist"), "entry_checklist"),
+    (lambda d: d["positions"][0]["entry_checklist"].update(not_chasing=False), "not_chasing"),
+    (lambda d: d.update(skills_applied=["market-regime"]), "skills_applied must include"),
+    (lambda d: d.pop("skills_applied"), "skills_applied must include"),
 ])
 def test_invalid_decisions(mutate, msg):
     raw = json.loads(json.dumps(VALID))

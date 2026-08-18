@@ -28,6 +28,7 @@ class SymbolStats:
     ret_12m: Optional[float]
     momentum: Optional[float]            # mean(3m, 6m, 12m returns) each measured to 1m ago
     vol_20d_ann: Optional[float]         # annualized 20d realized vol
+    ma20: Optional[float]                # 20d simple MA (anti-chasing reference)
     high_52w: Optional[float]
     pct_from_52w_high: Optional[float]   # (close - high) / high, <= 0
     above_50d: Optional[bool]
@@ -103,6 +104,7 @@ def symbol_stats(symbol: str, bars: Sequence[Bar], atr_period: int = 14) -> Opti
         ret_12m=trailing_return(closes, TRADING_DAYS["12m"]),
         momentum=momentum_12_1(closes),
         vol_20d_ann=realized_vol_ann(closes),
+        ma20=round(m, 4) if (m := sma(closes, 20)) is not None else None,
         high_52w=high_52,
         pct_from_52w_high=round((close - high_52) / high_52, 5) if high_52 else None,
         above_50d=(close > ma50) if ma50 is not None else None,

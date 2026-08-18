@@ -154,7 +154,8 @@ risk:
   max_turnover_pct_per_week: 0.50                     # notional traded / pot equity
   cooldown_days_after_stop_out: 5                     # same symbol re-entry after a stop fired
   cooldown_days_after_exit: 5                         # same symbol re-entry after ANY full exit
-  no_averaging_down: true                             # hard rule; validator rejects false
+  no_averaging_down: true
+  max_extension_atr: 1.5            # no chasing: reject entries > 1.5 ATR above the 20d MA                             # hard rule; validator rejects false
   stops:
     method: atr                                       # atr | pct
     atr_period: 14
@@ -209,13 +210,14 @@ cadence:                            # times in market_timezone
   daily_report:  {time: "16:20"}             # deterministic, no Claude
   event:                                     # event-triggered Claude runs (deterministic gate)
     max_per_day: 3
-    cooldown_minutes: 120
+    cooldown_minutes: 60
     min_materiality: 0.70                    # news score threshold (news/scoring.py)
     min_abs_move_pct: 0.02                   # AND price move on the symbol (was 0.03; a real
                                              # catalyst is often actionable before a 3% move)
   fast_loop_seconds: 60                      # RTH: reconcile, verify stops, kill switch, heartbeat
   slow_loop_seconds: 300                     # off-hours connectivity + heartbeat
-  news_poll_seconds: 900
+  news_poll_seconds: 300            # near-continuous deterministic stream (free RSS); the
+                                    # event gate still decides when the AI is woken
 
 llm:
   runner: claude_code               # claude_code | api (future; requires key — not used in v1)

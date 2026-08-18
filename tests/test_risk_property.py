@@ -61,13 +61,17 @@ def random_decision(rng, prices):
             target_weight=round(rng.uniform(0.01, 0.5), 3),
             thesis="randomized adversarial thesis", invalidation="random invalidation",
             stop_price=stop, target_price=None, confidence=rng.random(),
-            horizon_days=rng.randint(1, 90)))
+            horizon_days=rng.randint(1, 90),
+            entry_checklist={"sized_in_window": True, "stop_within_bounds": True,
+                             "not_chasing": True, "basis": rng.choice(["trend", "catalyst", "both"])}))
     stops = [StopUpdate(symbol=rng.choice(ACTIVE_SYMBOLS), stop_price=round(rng.uniform(1, 600), 2),
                         reason="random stop move") for _ in range(rng.randint(0, 2))]
     try:
         return Decision(run_type="weekly", action="rebalance", market_regime="neutral",
                         risk_multiplier=round(rng.random(), 2), positions=positions,
-                        stop_updates=stops, notes_for_human="prop test")
+                        stop_updates=stops, notes_for_human="prop test",
+                        skills_applied=["market-regime", "trend-selection", "position-sizing",
+                                        "trade-management", "failure-modes"])
     except Exception:
         return None
 

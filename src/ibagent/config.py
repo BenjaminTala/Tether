@@ -235,6 +235,8 @@ class RiskCfg(Strict):
     cooldown_days_after_stop_out: int = Field(ge=0)
     cooldown_days_after_exit: int = Field(ge=0, default=5)   # ANY full exit locks re-entry (sessions)
     no_averaging_down: Literal[True] = True
+    max_extension_atr: float = Field(gt=0, le=5, default=1.5)  # no chasing: entry price may sit
+    # at most this many ATRs above the 20d MA (enforced in code when bars are available)
     stops: StopsCfg
     targets: TargetsCfg
 

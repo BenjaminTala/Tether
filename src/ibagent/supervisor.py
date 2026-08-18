@@ -106,7 +106,7 @@ class Supervisor:
         self.state = ScheduleState.load(self.data_dir / "schedule_state.json")
         self.news = NewsStore(self.data_dir / "news_state.json")
         self.feeds = list(feeds) if feeds is not None else DEFAULT_FEEDS
-        self.skills_dir = skills_dir if skills_dir is not None else Path("skills")
+        self.skills_dir = (skills_dir if skills_dir is not None else Path("skills")).resolve()
         self.llm_state_path = self.data_dir / "llm_state.json"
         self.heartbeat_path = self.data_dir / "heartbeat.txt"
         self._stop = False
@@ -445,6 +445,14 @@ class Supervisor:
                 "realized": report.realized_pnl, "errors": report.errors})
 
     def _agent_job(self, run_type: str, now: datetime, event_note: str = "") -> None:
+        if not (self.skills_dir / "position-sizing" / "SKILL.md").is_file():
+            # Skills are part of the decision contract: no skills in the bundle, no model run.
+            self.journal.record("error", {"where": "agent_job",
+                                          "err": f"skills dir missing/incomplete: {self.skills_dir}"})
+            self.alerter.critical("run blocked: trading skills missing",
+                                  f"{run_type} run refused — {self.skills_dir} lacks the skill files. "
+                                  "Restore skills/ in the repo.")
+            return
         symbols = self._symbols_for_run(run_type)
         quotes = self._quotes(symbols)
         bars = self._bars(sorted(symbols), now)

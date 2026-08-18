@@ -120,7 +120,8 @@ def open_risk_usd(book: Book, prices: Dict[str, float]) -> float:
 
 
 def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Dict[str, float],
-                decision: Decision, now: datetime, *, kill_switch: bool = False) -> Plan:
+                decision: Decision, now: datetime, *, kill_switch: bool = False,
+                ma20s: Optional[Dict[str, float]] = None) -> Plan:
     now = utc(now)
     today = now.date()
     plan = Plan()
@@ -291,6 +292,14 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
             continue
         if is_new and count[sleeve] >= mandate.max_positions(sleeve, snap.equity):
             plan.rejections.append(Rejection(p.symbol, what, f"{sleeve} at max positions"))
+            continue
+        # No chasing (code-enforced book rule): entry must not sit stretched above its 20d MA.
+        atr_val, ma20 = atrs.get(p.symbol), (ma20s or {}).get(p.symbol)
+        if atr_val and ma20 and price > ma20 + mandate.risk.max_extension_atr * atr_val:
+            ext = (price - ma20) / atr_val
+            plan.rejections.append(Rejection(
+                p.symbol, what, f"over-extended: {ext:.1f} ATR above 20d MA "
+                                f"(max {mandate.risk.max_extension_atr}) — no chasing"))
             continue
 
         stop, stop_src = _resolve_stop(mandate, sleeve, price, p.stop_price, atrs.get(p.symbol))

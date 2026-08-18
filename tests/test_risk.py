@@ -11,21 +11,28 @@ THESIS = "momentum breakout above range"
 INVALID = "close below the 50-day"
 
 
+CHECKLIST = {"sized_in_window": True, "stop_within_bounds": True, "not_chasing": True,
+             "basis": "trend"}
+ALL_SKILLS = ["market-regime", "trend-selection", "position-sizing", "trade-management",
+              "failure-modes"]
+
+
 def intent(symbol, sleeve, weight, stop=None, target=None):
     return PositionIntent(symbol=symbol, sleeve=sleeve, target_weight=weight, thesis=THESIS,
                           invalidation=INVALID, stop_price=stop, target_price=target,
-                          confidence=0.6, horizon_days=30)
+                          confidence=0.6, horizon_days=30, entry_checklist=CHECKLIST)
 
 
 def rebalance(*positions, mult=1.0, stops=()):
     return Decision(run_type="weekly", action="rebalance", market_regime="neutral",
                     risk_multiplier=mult, positions=list(positions), stop_updates=list(stops),
-                    notes_for_human="test")
+                    skills_applied=ALL_SKILLS, notes_for_human="test")
 
 
 def no_change(*stops):
     return Decision(run_type="daily", action="no_change", market_regime="neutral",
-                    risk_multiplier=1.0, stop_updates=list(stops), notes_for_human="test")
+                    risk_multiplier=1.0, stop_updates=list(stops),
+                    skills_applied=["market-regime", "failure-modes"], notes_for_human="test")
 
 
 def fill(symbol, side, qty, price, comm=0.35):
@@ -190,6 +197,21 @@ def test_operating_floor_blocks_entries(mandate, tmp_path):
     plan = plan_orders(mandate, b, {"QQQ": make_quote("QQQ", 100)}, {},
                        rebalance(intent("QQQ", "trend", 0.12, stop=92)), NOW)
     assert plan.orders == [] and "operating floor" in plan.rejections[0].reason
+
+
+def test_no_chasing_over_extended_entry_rejected(mandate, tmp_path):
+    b = make_book(tmp_path)
+    q = {"QQQ": make_quote("QQQ", 100)}
+    d = rebalance(intent("QQQ", "trend", 0.12, stop=92))
+    # price 100 sits 5 ATR above the 20d MA of 90 -> chasing guard fires
+    plan = plan_orders(mandate, b, q, {"QQQ": 2.0}, d, NOW, ma20s={"QQQ": 90.0})
+    assert plan.orders == [] and "no chasing" in plan.rejections[0].reason
+    # same entry only 1 ATR extended -> allowed
+    plan2 = plan_orders(mandate, b, q, {"QQQ": 2.0}, d, NOW, ma20s={"QQQ": 98.0})
+    assert len(plan2.orders) == 1
+    # missing MA data -> guard silently inactive (stop/sizing rules still protect)
+    plan3 = plan_orders(mandate, b, q, {"QQQ": 2.0}, d, NOW)
+    assert len(plan3.orders) == 1
 
 
 # --------------------------------------------------------------------- exits / trims

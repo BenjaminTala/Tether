@@ -145,7 +145,8 @@ def run_cycle(m: Mandate, book: Book, journal: Journal, alerter: Alerter, runner
         alerter.warning(f"{run_type} run fell back to HOLD", reason[:400])
     journal.record("decision", _decision_payload(decision))
 
-    plan = plan_orders(m, book, quotes, atrs, decision, now, kill_switch=kill_switch)
+    ma20s = {s: v.ma20 for s, v in stats.items() if v.ma20}
+    plan = plan_orders(m, book, quotes, atrs, decision, now, kill_switch=kill_switch, ma20s=ma20s)
     journal.record("plan", {
         "run_type": run_type, "hold": plan.hold, "hold_reason": plan.hold_reason,
         "equity": plan.equity,

@@ -28,9 +28,13 @@ def env(md, tmp_path):
 
 
 def decision_dict(action="no_change", positions=None, run_type="daily"):
+    skills = ["market-regime", "failure-modes"]
+    if positions:
+        skills += ["trend-selection", "position-sizing", "trade-management"]
     return {"schema_version": 1, "run_type": run_type, "action": action,
             "market_regime": "neutral", "risk_multiplier": 1.0,
             "positions": positions or [], "stop_updates": [], "watchlist": [],
+            "skills_applied": skills,
             "notes_for_human": "test decision", "journal_lessons": ""}
 
 
@@ -95,7 +99,9 @@ def test_full_trade_path_on_sim(env):
     d = decision_dict(action="rebalance", run_type="weekly", positions=[{
         "symbol": "QQQ", "sleeve": "trend", "target_weight": 0.12,
         "thesis": "momentum breakout hold", "invalidation": "close under 50d",
-        "stop_price": 92.0, "confidence": 0.6, "horizon_days": 30}])
+        "stop_price": 92.0, "confidence": 0.6, "horizon_days": 30,
+        "entry_checklist": {"sized_in_window": True, "stop_within_bounds": True,
+                            "not_chasing": True, "basis": "trend"}}])
     res = run(env, FakeRunner([ok(d)]), run_type="weekly", quotes={"QQQ": make_quote("QQQ", 100)})
     assert not res.held and res.report is not None and res.report.filled == 1
     assert book.positions["QQQ"].qty == pytest.approx(1.2)

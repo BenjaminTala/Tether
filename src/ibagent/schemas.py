@@ -34,6 +34,22 @@ def _norm_symbol(s: str) -> str:
     return s.strip().upper()
 
 
+class EntryChecklist(_Model):
+    """Per-position attestation that the skill checklists were actually worked through.
+    Every field is REQUIRED and the booleans only accept `true` — a position the model cannot
+    honestly attest simply cannot be submitted. The engine independently re-verifies the
+    objective claims (sizing window, stop bounds, over-extension), so a hollow attestation on
+    those is caught by arithmetic, not trust."""
+    sized_in_window: Literal[True] = Field(
+        description="skills/position-sizing: an integer/fractional size lands inside the dollar window")
+    stop_within_bounds: Literal[True] = Field(
+        description="skills/trade-management: stop distance is inside the mandate bounds")
+    not_chasing: Literal[True] = Field(
+        description="skills/trend-selection: entry is NOT >1.5 ATR above the 20d MA / post-gap spike")
+    basis: Literal["trend", "catalyst", "both"] = Field(
+        description="what justifies the entry: momentum rank, a concrete dated catalyst, or both")
+
+
 class PositionIntent(_Model):
     symbol: str = Field(min_length=1, max_length=12, description="Whitelisted ticker")
     sleeve: ActiveSleeve
@@ -45,6 +61,8 @@ class PositionIntent(_Model):
     target_price: Optional[float] = Field(default=None, gt=0)
     confidence: float = Field(ge=0, le=1)
     horizon_days: int = Field(ge=1, le=180)
+    entry_checklist: EntryChecklist = Field(
+        description="REQUIRED skill attestation; submissions without it are rejected")
 
     @model_validator(mode="after")
     def _check(self) -> "PositionIntent":
@@ -74,6 +92,12 @@ class Decision(_Model):
     positions: List[PositionIntent] = Field(default_factory=list, max_length=MAX_ACTIVE_POSITIONS,
                                             description="Complete desired trend+spec book (rebalance only)")
     stop_updates: List[StopUpdate] = Field(default_factory=list, max_length=MAX_ACTIVE_POSITIONS)
+    skills_applied: List[str] = Field(
+        default_factory=list, max_length=12,
+        description="kebab-case names of the skill files worked through this run; "
+                    "rebalance-with-positions REQUIRES market-regime, trend-selection, "
+                    "position-sizing, trade-management and failure-modes; every run REQUIRES "
+                    "at least market-regime and failure-modes")
     watchlist: List[str] = Field(default_factory=list, max_length=15,
                                  description="Symbols the news gate should watch for event triggers")
     notes_for_human: str = Field(max_length=1200)
@@ -94,6 +118,14 @@ class Decision(_Model):
         if len(set(upd)) != len(upd):
             raise ValueError("duplicate symbols in stop_updates")
         self.watchlist = sorted({_norm_symbol(w) for w in self.watchlist if w.strip()})
+        applied = {s.strip().lower() for s in self.skills_applied}
+        base_required = {"market-regime", "failure-modes"}
+        entry_required = base_required | {"trend-selection", "position-sizing", "trade-management"}
+        required = entry_required if self.positions else base_required
+        missing = required - applied
+        if missing:
+            raise ValueError(f"skills_applied must include {sorted(missing)} — work through those "
+                             "skill files and list every one you applied")
         return self
 
     @property
@@ -131,6 +163,7 @@ def parse_decision(raw: Any, expected_run_type: Optional[RunType] = None) -> Dec
 def hold_decision(run_type: RunType, reason: str) -> Decision:
     """The engine's fallback when the model is unavailable or keeps violating the contract."""
     return Decision(run_type=run_type, action="no_change", market_regime="neutral", risk_multiplier=1.0,
+                    skills_applied=["market-regime", "failure-modes"],
                     notes_for_human=f"HOLD (engine fallback): {reason}"[:1200])
 
 

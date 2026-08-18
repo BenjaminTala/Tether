@@ -29,8 +29,12 @@ MAX_TEXT_CHARS = 800
 DEFAULT_FEEDS: List[str] = [
     "https://feeds.content.dowjones.io/public/rss/mw_topstories",          # MarketWatch top
     "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",         # MarketWatch pulse
+    "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines",   # MarketWatch real-time
     "https://www.cnbc.com/id/100003114/device/rss/rss.html",               # CNBC top news
     "https://www.cnbc.com/id/15839135/device/rss/rss.html",                # CNBC markets
+    "https://www.cnbc.com/id/19854910/device/rss/rss.html",                # CNBC earnings
+    "https://www.cnbc.com/id/100727362/device/rss/rss.html",               # CNBC technology
+    "https://finance.yahoo.com/news/rssindex",                             # Yahoo Finance
     "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=8-K&dateb=&owner=include"
     "&count=40&output=atom",                                               # EDGAR current 8-Ks
 ]
