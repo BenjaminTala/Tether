@@ -207,7 +207,7 @@ cadence:                            # times in market_timezone
   daily_check:   {time: "08:45"}             # light Claude run: stops/thesis check, overnight news
   daily_report:  {time: "16:20"}             # deterministic, no Claude
   event:                                     # event-triggered Claude runs (deterministic gate)
-    max_per_day: 2
+    max_per_day: 3
     cooldown_minutes: 120
     min_materiality: 0.70                    # news score threshold (news/scoring.py)
     min_abs_move_pct: 0.02                   # AND price move on the symbol (was 0.03; a real
@@ -220,11 +220,11 @@ llm:
   runner: claude_code               # claude_code | api (future; requires key — not used in v1)
   claude_bin: claude                # resolved via PATH; on Windows prefers claude.exe over claude.cmd
   model: ""                         # "" = Claude Code default; or e.g. "opus" / "sonnet"
-  max_turns:       {weekly: 25, daily: 8, event: 8}
-  timeout_seconds: {weekly: 900, daily: 420, event: 420}
+  max_turns:       {weekly: 50, daily: 20, event: 20}   # deep research encouraged (user request:
+  timeout_seconds: {weekly: 1800, daily: 900, event: 900}  # spend budget on decision quality)
   retries_on_invalid: 1             # re-prompt once with validation errors, then HOLD
   backoff_minutes_on_unavailable: [10, 30]
-  daily_invocation_cap: 4           # weekly + daily + events, hard cap per calendar day
+  daily_invocation_cap: 8           # weekly + daily + events + Q&A, hard cap per calendar day
   tools: [Read, Grep, Glob, WebSearch, WebFetch]     # validator: read-only tools only
   permission_mode: dontAsk
   sandbox:

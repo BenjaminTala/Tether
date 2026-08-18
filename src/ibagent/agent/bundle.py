@@ -66,33 +66,45 @@ Every position needs a falsifiable thesis, an invalidation condition, and a stop
 
 TASKS: Dict[str, str] = {
     "weekly": """\
-# Weekly deep review
+# Weekly deep review — go deep, this is the run that earns its tokens
 
-1. Read portfolio.json (current book, P&L, breaker state) and market.json (momentum table).
-2. Read journal_tail.md: which of your recent theses worked, which were invalidated, and why?
-   Put the lesson in `journal_lessons`.
-3. Assess regime (breadth, trend of the major ETFs, vol) -> `market_regime` and `risk_multiplier`.
-4. Trend sleeve: rank by the momentum column; prefer uptrends (above_200d) with acceptable
-   ATR%. Propose the target trend book.
-5. Spec sleeve: at most the mandate's max, only with a concrete near-term catalyst from the
-   digest or your research; small weights.
-6. For every position: target_weight, stop_price, target_price, thesis, invalidation, horizon.
-7. Update `watchlist` (symbols the news gate should watch).
+WORKFLOW (use the skills/ directory: each file is a checklist distilled from the trading
+books this system is built on — trend-selection, position-sizing, news-analysis,
+market-regime, trade-management, costs-and-frictions, decision-journal, failure-modes):
+
+1. Read portfolio.json and market.json. Read journal_tail.md and score your own recent
+   calls: which theses worked, which were invalidated, why -> `journal_lessons`.
+2. Regime (skills/market-regime): breadth, major-ETF trends vs MAs, vol level ->
+   `market_regime` and `risk_multiplier`.
+3. Candidate list (skills/trend-selection): rank by the momentum column, require uptrend
+   structure, acceptable ATR%. Take the top 5-8 candidates seriously, not just the top 2.
+4. RESEARCH the finalists — this is where to spend turns: for each candidate AND each held
+   position, check recent news (WebSearch) and fundamentals where they matter (revenue/margin
+   trajectory, guidance, valuation red flags — WebFetch from the allowlisted domains, e.g.
+   finance.yahoo.com quote pages, sec.gov filings). A thesis should cite something concrete:
+   a number, a filing, a dated event. If research contradicts momentum, say so and skip.
+5. Spec sleeve: only concrete near-term catalysts from the digest or your research.
+6. Size and protect (skills/position-sizing, trade-management): target_weight within the
+   sizing window, stop_price honoring the max stop distance, target, invalidation, horizon.
+7. Self-check (skills/failure-modes) BEFORE answering: chasing? averaging down? thesis
+   unfalsifiable? overtrading? If any check fires, prefer no_change.
+8. Update `watchlist` generously (the news gate watches these for event triggers).
 Reply with the decision JSON only.""",
     "daily": """\
 # Daily check + opportunity scan
 
-1. Compare each held position in portfolio.json against its invalidation condition and the
-   overnight items in news_digest.md. If a thesis is broken, exit it (action "rebalance"
-   with the full remaining book) or tighten its stop (`stop_updates`).
-2. OPPORTUNITY SCAN: if the digest or your research shows a concrete, fresh catalyst on a
-   whitelisted symbol (guidance change, major product/deal news, earnings reaction with
-   follow-through), you MAY open a position for it — spec sleeve for catalyst bets, trend
-   sleeve if it also ranks well on momentum. A good week has roughly 1-3 trades; a catalyst
-   strong enough to act on should be one you can state in one sentence with a falsifiable
-   invalidation. No catalyst, no trade: `action: "no_change"` remains the right answer on a
-   quiet day. Never trade just to be active — the weekly/turnover caps are enforced anyway.
-3. Remember the caps in mandate_excerpt.md; prefer one good entry over two mediocre ones.
+1. For each held position (portfolio.json): test its invalidation against overnight news
+   (news_digest.md AND a quick WebSearch on the ticker — the digest is not exhaustive).
+   Broken thesis -> exit (action "rebalance" with the full remaining book) or tighten its
+   stop (`stop_updates`), guided by skills/trade-management.
+2. OPPORTUNITY SCAN (skills/news-analysis first — classify each headline's event type and
+   durability before acting): if there is a concrete, fresh catalyst on a whitelisted
+   symbol (guidance change, major product/deal news, earnings with follow-through), research
+   it properly — WebSearch the story, WebFetch the numbers (finance.yahoo.com, sec.gov) —
+   then you MAY open a position: spec sleeve for catalyst bets, trend sleeve if it also
+   ranks on momentum. The thesis must cite the catalyst and a falsifiable invalidation.
+3. Run the skills/failure-modes checklist before answering. A good week has ~1-3 trades;
+   `action: "no_change"` remains the right answer on a quiet day. Never trade to be active.
 Reply with the decision JSON only.""",
     "event": """\
 # Event-triggered review

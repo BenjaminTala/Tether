@@ -31,6 +31,11 @@ def md(mandate_dict):
     d["broker"]["fractional_shares"] = True
     d["risk"]["max_position_weight_pct"] = {"core": 0.35, "trend": 0.12, "spec": 0.06}
     d["execution"]["limit_offset_bps"] = 15
+    d["llm"]["max_turns"] = {"weekly": 25, "daily": 8, "event": 8}
+    d["llm"]["timeout_seconds"] = {"weekly": 900, "daily": 420, "event": 420}
+    d["llm"]["daily_invocation_cap"] = 4
+    # never let tests reach the real Telegram API (the supervisor polls it when configured)
+    d["alerts"]["channels"] = ["stdout"]
     return d
 
 

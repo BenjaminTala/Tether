@@ -21,11 +21,11 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Set
+from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo
 
-from ibagent.agent.orchestrator import run_cycle
-from ibagent.alerts import Alerter, build_alerter
+from ibagent.agent.orchestrator import LLMState, run_cycle
+from ibagent.alerts import Alerter, build_alerter, get_secret
 from ibagent.book import Book
 from ibagent.capital import CapitalLedger
 from ibagent.broker.base import Bar, Broker, Contract, Quote
@@ -38,6 +38,7 @@ from ibagent.marketclock import is_rth, is_trading_day, previous_trading_day, ut
 from ibagent.news.ingest import DEFAULT_FEEDS, NewsStore, poll as news_poll
 from ibagent.news.scoring import (EventGateState, build_digest, check_event_gate, score_items)
 from ibagent.schemas import decision_json_schema_text
+from ibagent.telegram_in import HELP_TEXT, classify, poll as tg_poll
 from ibagent.sleeves import core_rebalance, evaluate_breakers, protective_actions, sleeve_pause_until
 
 DATA_DIR = Path("data")
@@ -55,6 +56,7 @@ class ScheduleState:
     last_news_poll_ts: float = 0.0
     last_protective_ts: float = 0.0
     last_status_ts: float = 0.0
+    telegram_offset: int = 0
     last_fill_sync: str = ""             # ISO datetime
     watchlist: List[str] = field(default_factory=list)
     event_gate: dict = field(default_factory=dict)
@@ -189,6 +191,7 @@ class Supervisor:
         now = utc(now)
         self._heartbeat(now)
         self.sync_capital()
+        self._telegram_job(now)                # owner can always reach the agent, even killed
         if self._kill_engaged():
             return
         if not self._ensure_connected():
@@ -462,24 +465,24 @@ class Supervisor:
             return held | core | {i.symbol for i in self.m.universe.active.instruments}
         return held | core | set(self.state.watchlist)
 
-    def _status_update(self, now: datetime) -> None:
-        """Short intraday Telegram pulse: equity, day P&L, open positions with live P&L."""
-        self.state.last_status_ts = now.timestamp()
-        self.state.save(self.data_dir / "schedule_state.json")
+    def _status_text(self, now: datetime) -> Optional[Tuple[str, str]]:
+        """(title, body) for the P&L pulse; shared by the 2h schedule and the `status` command."""
         held = set(self.book.positions)
         quotes = self._quotes(held) if held else {}
         prices = {s: (q.mid or q.last) for s, q in quotes.items() if (q.mid or q.last)}
         try:
             snap = self.book.equity(prices, now)
         except Exception:
-            return                                            # missing marks: skip the pulse quietly
+            return None
         day_pnl = snap.equity - self.book.day_start_equity if self.book.day_start_equity else 0.0
         day_pct = day_pnl / self.book.day_start_equity if self.book.day_start_equity else 0.0
         total_pnl = snap.equity - self.book.net_contributions
         total_pct = total_pnl / self.book.net_contributions if self.book.net_contributions > 0 else 0.0
+        fees_today, _ = self._fees_and_realized_today(now)
         mood = "📈" if day_pnl >= 0 else "📉"
         lines = [
             f"P&L today:     {day_pnl:+,.2f} $  ({day_pct:+.2%})",
+            f"  before fees: {day_pnl + fees_today:+,.2f} $",
             f"P&L all-time:  {total_pnl:+,.2f} $  ({total_pct:+.2%})",
             f"Equity ${snap.equity:,.2f} · cash ${snap.pot_cash:,.2f} · "
             f"{len(self.book.positions)} position(s)",
@@ -492,8 +495,96 @@ class Supervisor:
                 pct = mark / p.avg_cost - 1.0 if p.avg_cost else 0.0
                 stop = f"{p.stop_price:,.2f}" if p.stop_price else "—"
                 lines.append(f"{p.symbol:<6}{mark:>9,.2f}{pnl:>+9.2f}{pct:>+8.1%}   {stop}")
-        self.alerter.info(f"{mood} {now.astimezone(self.tz):%H:%M} — {'up' if day_pnl >= 0 else 'down'} "
-                          f"{abs(day_pnl):,.2f} $ today", "\n".join(lines), dedupe=False)
+        title = (f"{mood} {now.astimezone(self.tz):%H:%M} — "
+                 f"{'up' if day_pnl >= 0 else 'down'} {abs(day_pnl):,.2f} $ today")
+        return title, "\n".join(lines)
+
+    def _status_update(self, now: datetime) -> None:
+        self.state.last_status_ts = now.timestamp()
+        self.state.save(self.data_dir / "schedule_state.json")
+        st = self._status_text(now)
+        if st:
+            self.alerter.info(st[0], st[1], dedupe=False)
+
+    # ------------------------------------------------------------------ inbound Telegram
+    def _telegram_job(self, now: datetime) -> None:
+        if "telegram" not in self.m.alerts.channels:
+            return
+        token, chat = get_secret("TELEGRAM_BOT_TOKEN"), get_secret("TELEGRAM_CHAT_ID")
+        if not token or not chat:
+            return
+        offset, texts = tg_poll(token, chat, self.state.telegram_offset)
+        if offset != self.state.telegram_offset:
+            self.state.telegram_offset = offset
+            self.state.save(self.data_dir / "schedule_state.json")
+        for text in texts:
+            try:
+                self._handle_owner_message(text, now)
+            except Exception as exc:
+                self.journal.record("error", {"where": "telegram_handle", "err": repr(exc)})
+                self.alerter.info("💬 sorry", f"couldn't process that: {exc}", dedupe=False)
+
+    def _handle_owner_message(self, text: str, now: datetime) -> None:
+        kind = classify(text)
+        self.journal.record("owner_message", {"text": text[:300], "kind": kind})
+        if kind in ("command:status", "command:pnl", "command:positions"):
+            st = self._status_text(now)
+            if st:
+                self.alerter.info(st[0], st[1], dedupe=False)
+            else:
+                self.alerter.info("💬 status unavailable", "cannot mark the book right now "
+                                  "(missing prices); try again in a minute", dedupe=False)
+        elif kind == "command:report":
+            self._report_job(now)
+        elif kind == "command:help":
+            self.alerter.info("ℹ️ Agent commands", HELP_TEXT, dedupe=False)
+        else:
+            self._qa_job(text, now)
+
+    def _qa_job(self, question: str, now: datetime) -> None:
+        """Answer a free-text owner question with a read-only Claude run. Counts against the
+        daily invocation cap; can never trade — there is no decision/order path from here."""
+        state = LLMState.load(self.llm_state_path)
+        today = now.date().isoformat()
+        if state.day != today:
+            state.day, state.count = today, 0
+        if state.count >= self.m.llm.daily_invocation_cap:
+            self.alerter.info("💬 out of AI budget for today",
+                              f"the daily cap of {self.m.llm.daily_invocation_cap} runs is used up; "
+                              "commands like `status` still work", dedupe=False)
+            return
+        state.count += 1
+        state.runs_total += 1
+        state.save(self.llm_state_path)
+        self.alerter.info("💬 on it", "researching your question — this can take a minute or two",
+                          dedupe=False)
+        from ibagent.llm.runner import ClaudeCodeRunner, RunRequest, default_runs_root
+        runs_root = default_runs_root(self.m.llm.sandbox.runs_root)
+        bundle_dir = runs_root / f"{now:%Y%m%d-%H%M%S}-qa"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        held = set(self.book.positions)
+        quotes = self._quotes(held) if held else {}
+        prices = {s: (q.mid or q.last) for s, q in quotes.items() if (q.mid or q.last)}
+        try:
+            snap = self.book.equity(prices, now)
+            from ibagent.agent.bundle import portfolio_json
+            (bundle_dir / "portfolio.json").write_text(
+                json.dumps(portfolio_json(self.book, snap, self.m), indent=1), encoding="utf-8")
+        except Exception:
+            (bundle_dir / "portfolio.json").write_text("{}", encoding="utf-8")
+        (bundle_dir / "question.md").write_text(question, encoding="utf-8")
+        runner = ClaudeCodeRunner(self.m.llm, schema_text=None)
+        prompt = ("You are the assistant for the owner of this small trading system. "
+                  "question.md is the owner's question; portfolio.json is the current book. "
+                  "Answer briefly and concretely (under 250 words, plain text, no markdown "
+                  "tables). Use WebSearch/WebFetch if the question needs current information. "
+                  "You cannot trade or change anything - if asked to trade, explain that "
+                  "decisions happen in the scheduled runs under the mandate.")
+        res = runner.run(RunRequest(run_type="daily", bundle_dir=bundle_dir, prompt=prompt))
+        answer = (res.text or "").strip() or f"(no answer: {res.error})"
+        self.journal.record("qa", {"question": question[:300], "ok": res.ok,
+                                   "duration_s": res.duration_s})
+        self.alerter.info("💬 answer", answer[:3500], dedupe=False)
 
     def _report_job(self, now: datetime) -> None:
         held = set(self.book.positions) | set(self.m.universe.active.core_holdings)
@@ -508,14 +599,33 @@ class Supervisor:
         day_pct = day_pnl / self.book.day_start_equity if self.book.day_start_equity else 0.0
         since_start = snap.equity - self.book.net_contributions
         since_pct = since_start / self.book.net_contributions if self.book.net_contributions > 0 else 0.0
+        fees_today, realized_today = self._fees_and_realized_today(now)
         mood = "📈" if day_pnl >= 0 else "📉"
 
         # ---- plain-language summary first -------------------------------------------------
         lines = [
-            f"Today:        {day_pnl:+,.2f} $ ({day_pct:+.2%})",
-            f"Since start:  {since_start:+,.2f} $ ({since_pct:+.2%}) on "
+            f"P&L today:     {day_pnl:+,.2f} $ ({day_pct:+.2%})",
+            f"  before fees: {day_pnl + fees_today:+,.2f} $   (fees paid today: {fees_today:,.2f} $)",
+            f"P&L all-time:  {since_start:+,.2f} $ ({since_pct:+.2%}) on "
             f"${self.book.net_contributions:,.0f} put in",
         ]
+        if realized_today:
+            lines.append(f"Locked in today (closed trades): {realized_today:+,.2f} $")
+
+        # ---- per-stock rundown: how each holding moved TODAY ------------------------------
+        if self.book.positions:
+            bars = self._bars(sorted(self.book.positions), now)
+            lines += ["", "How each stock did today:"]
+            for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
+                mark = prices.get(p.symbol, p.avg_cost)
+                prev = self._prev_close(bars.get(p.symbol), now)
+                base = prev if prev and p.entry_date < now.astimezone(self.tz).date().isoformat() \
+                    else p.avg_cost                      # entered today: measure from entry
+                day_move = (mark - base) * p.qty
+                day_move_pct = mark / base - 1.0 if base else 0.0
+                total = (mark - p.avg_cost) * p.qty
+                lines.append(f"• {p.symbol}: {day_move:+,.2f} $ today ({day_move_pct:+.1%}) · "
+                             f"total {total:+,.2f} $ since entry")
         watch = self._watch_outs(prices, now)
         lines.append("")
         if watch:
@@ -543,6 +653,29 @@ class Supervisor:
         body = "\n".join(lines)
         self.journal.record("daily_report", {"equity": snap.equity, "text": body})
         self.alerter.info(f"{mood} Daily report — {now.astimezone(self.tz):%a %b %d}", body)
+
+    def _fees_and_realized_today(self, now: datetime) -> tuple[float, float]:
+        """Sum commissions and realized P&L from today's fills (market-timezone day)."""
+        today = now.astimezone(self.tz).date().isoformat()
+        fees = realized = 0.0
+        for e in self.journal.iter(kinds=("fill",)):
+            p = e.get("payload", {})
+            if str(p.get("ts", e.get("ts", "")))[:10] == today:
+                fees += float(p.get("commission", 0.0) or 0.0)
+                r = p.get("realized")
+                if isinstance(r, (int, float)):
+                    realized += r
+        return round(fees, 2), round(realized, 2)
+
+    @staticmethod
+    def _prev_close(bars: Optional[List[Bar]], now: datetime) -> Optional[float]:
+        if not bars:
+            return None
+        today = now.date()
+        for b in reversed(bars):
+            if b.ts.date() < today:
+                return b.close
+        return None
 
     def _watch_outs(self, prices: Dict[str, float], now: datetime) -> List[str]:
         """Plain-language flags a non-technical reader should act on or know about."""
