@@ -103,8 +103,15 @@ Reply with the decision JSON only.""",
    it properly — WebSearch the story, WebFetch the numbers (finance.yahoo.com, sec.gov) —
    then you MAY open a position: spec sleeve for catalyst bets, trend sleeve if it also
    ranks on momentum. The thesis must cite the catalyst and a falsifiable invalidation.
-3. Run the skills/failure-modes checklist before answering. A good week has ~1-3 trades;
-   `action: "no_change"` remains the right answer on a quiet day. Never trade to be active.
+3. DEPLOYMENT CHECK: compare each sleeve's current value (portfolio.json sleeve_equity)
+   against its target share of equity. If trend or spec sits well below target while your
+   regime read is supportive, treat redeployment as this run's primary task: propose a full
+   `rebalance` book that brings the sleeves toward target using your best-ranked candidates
+   (this also naturally re-attempts entries whose orders expired unfilled). Idle cash in a
+   risk_on regime is a position too — hold it only with a stated reason (weak candidates,
+   stretched entries, pending event). In risk_off, cash needs no excuse.
+4. Run the skills/failure-modes checklist before answering. `action: "no_change"` remains
+   right on a quiet, fully-deployed day. Never trade just to be active.
 Reply with the decision JSON only.""",
     "event": """\
 # Event-triggered review

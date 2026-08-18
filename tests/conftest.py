@@ -30,6 +30,7 @@ def md(mandate_dict):
     d["account"]["ibkr_account_id"] = ""
     d["broker"]["fractional_shares"] = True
     d["risk"]["max_position_weight_pct"] = {"core": 0.35, "trend": 0.12, "spec": 0.06}
+    d["risk"]["max_new_positions_per_week"] = 3
     d["execution"]["limit_offset_bps"] = 15
     d["llm"]["max_turns"] = {"weekly": 25, "daily": 8, "event": 8}
     d["llm"]["timeout_seconds"] = {"weekly": 900, "daily": 420, "event": 420}

@@ -149,7 +149,8 @@ risk:
   # trend 0.18 (was 0.12): at small pots the USD floor (min_position_usd) IS the binding cap;
   # 0.12 made floor > cap so no trend entry could ever pass. 0.18 gives whole-share headroom.
   max_position_weight_pct: {core: 0.35, trend: 0.18, spec: 0.06}
-  max_new_positions_per_week: 3
+  max_new_positions_per_week: 5   # was 3: with 4 trend + 3 spec slots at $10k, 3 starved
+                                  # deployment for a whole week after one active Monday
   max_turnover_pct_per_week: 0.50                     # notional traded / pot equity
   cooldown_days_after_stop_out: 5                     # same symbol re-entry after a stop fired
   cooldown_days_after_exit: 5                         # same symbol re-entry after ANY full exit

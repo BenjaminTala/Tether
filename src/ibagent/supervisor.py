@@ -372,12 +372,15 @@ class Supervisor:
             self.state.save(self.data_dir / "schedule_state.json")
             self._agent_job("daily", now)
 
+        # Core rebalance needs the MARKET OPEN (DAY limit orders): late morning, inside RTH.
+        if is_trading_day(today) and is_rth(now) and "10:00" <= hhmm <= "15:30":
+            self._maybe_rebalance(now)
+
         if is_trading_day(today) and hhmm >= c.daily_report.time \
                 and self.state.last_report != today.isoformat():
             self.state.last_report = today.isoformat()
             self.state.save(self.data_dir / "schedule_state.json")
             self._report_job(now)
-            self._maybe_rebalance(now)
 
     def _news_job(self, now: datetime, quotes: Dict[str, Quote]) -> None:
         self.state.last_news_poll_ts = now.timestamp()
@@ -715,16 +718,22 @@ class Supervisor:
         return out
 
     def _maybe_rebalance(self, now: datetime) -> None:
+        """Bring the core sleeve to target. The period is marked done ONLY when every intent
+        fills (or nothing needed doing) — an unfilled/errored attempt retries the next RTH
+        window with freshly recomputed diffs, instead of silently skipping to next month."""
         local = now.astimezone(self.tz)
         period = local.strftime("%Y-%m") if self.m.sleeves.rebalance == "monthly" \
             else _monday(local.date())
         if self.state.last_rebalance_period == period or self.book.halted or self.book.frozen:
             return
-        self.state.last_rebalance_period = period
-        self.state.save(self.data_dir / "schedule_state.json")
         core = set(self.m.universe.active.core_holdings) | set(self.book.positions)
         quotes = self._quotes(core)
         prices = {s: (q.mid or q.last) for s, q in quotes.items() if (q.mid or q.last)}
+        missing_core = set(self.m.universe.active.core_holdings) - set(prices)
+        if missing_core:
+            self.journal.record("warning", {"where": "rebalance",
+                                            "err": f"no quotes for {sorted(missing_core)}"})
+            return                                        # retry next window, period NOT consumed
         try:
             snap = self.book.equity(prices, now)
         except Exception as exc:
@@ -732,13 +741,21 @@ class Supervisor:
             return
         intents, sweep = core_rebalance(self.m, self.book, snap, prices, local.date())
         if not intents:
+            self.state.last_rebalance_period = period     # in band: genuinely nothing to do
+            self.state.save(self.data_dir / "schedule_state.json")
             return
         report = self.executor.execute_rebalance(intents, quotes)
-        if sweep > 0:
-            self.book.spec_profit_since_sweep = 0.0
-            self.book.save()
+        complete = report.filled == len(intents) and not report.errors
+        if complete:
+            self.state.last_rebalance_period = period
+            self.state.save(self.data_dir / "schedule_state.json")
+            if sweep > 0:
+                self.book.spec_profit_since_sweep = 0.0
+                self.book.save()
         self.journal.record("rebalance", {
             "intents": [f"{i.side} {i.symbol} ${i.usd:.2f}" for i in intents],
+            "filled": report.filled, "complete": complete,
             "sweep": sweep, "errors": report.errors})
-        self.alerter.info("core rebalance",
-                          "\n".join(f"{i.side} {i.symbol} ${i.usd:.2f}" for i in intents))
+        self.alerter.info("🏦 core rebalance" + ("" if complete else " (partial — will retry)"),
+                          "\n".join(f"{i.side} {i.symbol} ${i.usd:.2f}" for i in intents),
+                          dedupe=False)
