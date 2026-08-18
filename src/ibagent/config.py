@@ -344,7 +344,7 @@ class LLMCfg(Strict):
     timeout_seconds: Dict[RunType, int]
     retries_on_invalid: int = Field(ge=0, le=3)
     backoff_minutes_on_unavailable: List[int] = Field(min_length=1)
-    daily_invocation_cap: int = Field(ge=1, le=20)
+    daily_invocation_cap: int = Field(ge=1, le=50)   # upper bound = runaway-bug backstop ceiling
     tools: List[str] = Field(min_length=1)
     permission_mode: Literal["dontAsk"] = "dontAsk"
     sandbox: SandboxCfg = SandboxCfg()
