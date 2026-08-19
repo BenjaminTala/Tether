@@ -44,7 +44,7 @@ from ibagent.sleeves import core_rebalance, evaluate_breakers, protective_action
 DATA_DIR = Path("data")
 BARS_FOR_STATS = 300
 PROTECTIVE_MIN_SPACING_S = 900
-STATUS_UPDATE_SPACING_S = 7200          # intraday Telegram status every 2h during RTH
+STATUS_UPDATE_SPACING_S = 3600          # intraday Telegram status every hour during RTH
 
 
 @dataclass
@@ -517,8 +517,14 @@ class Supervisor:
         self.state.last_status_ts = now.timestamp()
         self.state.save(self.data_dir / "schedule_state.json")
         st = self._status_text(now)
-        if st:
-            self.alerter.info(st[0], st[1], dedupe=False)
+        if not st:
+            return
+        title, body = st
+        if self.variant_name == "main":
+            fleet = self._fleet_lines()
+            if fleet:
+                body += "\n\n🧪 Shadow fleet:\n" + "\n".join(fleet)
+        self.alerter.info(title, body, dedupe=False)
 
     # ------------------------------------------------------------------ inbound Telegram
     def _telegram_job(self, now: datetime) -> None:
