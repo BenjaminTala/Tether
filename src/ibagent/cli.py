@@ -189,10 +189,12 @@ def _build_shadow_supervisor(m: Mandate, name: str):
     if not ledger.is_initialized():
         ledger.init_seed(m.capital.seed_usd, note=f"shadow '{name}' auto-seed (simulated cash)")
     data = IBKRBroker(m.broker, account_id=m.account.ibkr_account_id, base_currency=m.base_currency)
-    sim = SimBroker(SimConfig(initial_cash=ledger.net_contributions(),
-                              commission_model=m.capital.commission_model))
+    sim = SimBroker(SimConfig(initial_cash=0.0, commission_model=m.capital.commission_model))
     from datetime import datetime, timezone
     sim.set_time(datetime.now(timezone.utc))
+    from ibagent.book import Book
+    from ibagent.broker.shadow import restore_sim_state
+    restore_sim_state(sim, Book.load(data_dir / "book.json"), ledger.net_contributions())
     return Supervisor(m, ShadowBroker(data, sim), data_dir=data_dir, variant_name=name)
 
 

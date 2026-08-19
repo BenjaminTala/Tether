@@ -1,10 +1,11 @@
-# Shadow variant "sniper" — catalyst/news specialist: big spec sleeve, hair-trigger event
+# Shadow variant "sniper" - catalyst/news specialist: big spec sleeve, hair-trigger event
 # gate, quicker profit-taking. The GameStop-style opportunity hunter, contained.
 description: >
   News-driven: 35% spec sleeve with a more sensitive event gate (materiality 0.6, 1.5% move,
   4 events/day) and faster exits (+20% target, 7-day time stop). Tests whether reacting hard
   to catalysts beats riding trends.
 overrides:
+  capital.seed_usd: 10000
   broker.client_id: 19
   sleeves.core.weight: 0.40
   sleeves.trend.weight: 0.20
@@ -24,3 +25,4 @@ overrides:
   llm.sandbox.runs_root: "C:/Users/Benjamin/AppData/Local/ibagent/runs-sniper"
   journal.dir: "data-shadows/sniper/journal"
   alerts.channels: ["stdout"]
+

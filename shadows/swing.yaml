@@ -1,0 +1,30 @@
+# Shadow variant "swing" - fast rotation: tight stops, quick partial profits, short leashes.
+# Tests whether cutting fast and compounding small wins beats letting trends breathe -
+# and whether the fee drag of higher turnover eats the edge.
+description: >
+  Fast cycle: 35% trend / 20% spec with tight stops (2.0/1.5 ATR), partial profit at +1.5R,
+  +15% spec target, 5-day time stops, double turnover allowance.
+overrides:
+  capital.seed_usd: 10000
+  broker.client_id: 21
+  sleeves.core.weight: 0.35
+  sleeves.trend.weight: 0.35
+  sleeves.trend.max_positions: 4
+  sleeves.spec.weight: 0.20
+  sleeves.spec.max_positions: 3
+  sleeves.cash.weight: 0.10
+  risk.max_position_weight_pct: {core: 0.35, trend: 0.18, spec: 0.10}
+  risk.max_new_positions_per_week: 8
+  risk.max_turnover_pct_per_week: 1.0
+  risk.stops.atr_multiple: {trend: 2.0, spec: 1.5}
+  risk.stops.pct_distance: {trend: 0.06, spec: 0.08}
+  risk.stops.max_distance_pct: {trend: 0.08, spec: 0.10}
+  risk.targets.trend.partial_take_r: 1.5
+  risk.targets.trend.trail_atr_multiple: 2.0
+  risk.targets.spec.take_profit_pct: 0.15
+  risk.targets.spec.time_stop_trading_days: 5
+  llm.daily_invocation_cap: 12
+  llm.sandbox.runs_root: "C:/Users/Benjamin/AppData/Local/ibagent/runs-swing"
+  journal.dir: "data-shadows/swing/journal"
+  alerts.channels: ["stdout"]
+

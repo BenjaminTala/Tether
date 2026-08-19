@@ -1,0 +1,24 @@
+# Shadow variant "turtle" - the patient one: index-heavy, tiny risk, few trades.
+# The control group: if the active variants can't beat this sleepy allocator, the
+# activity isn't earning its fees.
+description: >
+  Defensive: 65% core index / 20% trend / 5% spec / 10% cash, half-size risk per trade,
+  max 2 new positions a week. Tests whether trading adds anything over mostly indexing.
+overrides:
+  capital.seed_usd: 10000
+  broker.client_id: 20
+  sleeves.core.weight: 0.65
+  sleeves.trend.weight: 0.20
+  sleeves.trend.max_positions: 2
+  sleeves.spec.weight: 0.05
+  sleeves.spec.max_positions: 1
+  sleeves.cash.weight: 0.10
+  risk.per_trade_risk_pct: {trend: 0.005, spec: 0.004}
+  risk.per_trade_risk_hard_cap_pct: {trend: 0.008, spec: 0.006}
+  risk.max_new_positions_per_week: 2
+  risk.max_turnover_pct_per_week: 0.3
+  llm.daily_invocation_cap: 12
+  llm.sandbox.runs_root: "C:/Users/Benjamin/AppData/Local/ibagent/runs-turtle"
+  journal.dir: "data-shadows/turtle/journal"
+  alerts.channels: ["stdout"]
+

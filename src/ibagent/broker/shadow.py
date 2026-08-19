@@ -20,6 +20,21 @@ from ibagent.broker.base import (AccountSnapshot, Bar, Contract, Fill, OrderRequ
 from ibagent.broker.sim import SimBroker
 
 
+def restore_sim_state(sim: SimBroker, book, ledger_net: float) -> None:
+    """Rebuild the in-memory simulator from the persisted book after a restart.
+
+    The sim starts with cash = the book's pot cash plus any ledger contributions the
+    supervisor's capital sync is about to apply, and re-owns every book position at its
+    average cost — otherwise the first reconcile after a restart would see the shares
+    missing and freeze the shadow. (Resting GTC stops are re-armed by the supervisor's
+    protective loop on its first RTH pass.)"""
+    pending_contrib = ledger_net - book.net_contributions
+    cash = book.pot_cash + max(0.0, pending_contrib)
+    sim._total_cash = sim._settled_cash = round(max(cash, 0.0), 2)
+    for pos in book.positions.values():
+        sim.force_position(pos.symbol, pos.qty, pos.avg_cost)
+
+
 class ShadowBroker:
     def __init__(self, data_broker, sim: SimBroker,
                  now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):

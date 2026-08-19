@@ -1,9 +1,10 @@
-# Shadow variant "bold" — heavier trend allocation, more positions, faster compounding test.
+# Shadow variant "bold" - heavier trend allocation, more positions, faster compounding test.
 # Same brain, same skills, same hard rules; only these knobs differ from mandate.yaml.
 description: >
   Trend-heavy: 45% trend / 25% spec vs the main agent's 30/15. Tests whether the momentum
   engine earns its keep when given real weight, at the cost of a thinner safety core.
 overrides:
+  capital.seed_usd: 10000
   broker.client_id: 18
   sleeves.core.weight: 0.25
   sleeves.trend.weight: 0.45
@@ -18,3 +19,4 @@ overrides:
   llm.sandbox.runs_root: "C:/Users/Benjamin/AppData/Local/ibagent/runs-bold"
   journal.dir: "data-shadows/bold/journal"
   alerts.channels: ["stdout"]
+
