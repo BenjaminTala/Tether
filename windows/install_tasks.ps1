@@ -49,8 +49,9 @@ Register-ScheduledTask -TaskName "IBAgent-Supervisor" -Action $supAction -Trigge
     -Settings $supSettings -Principal $principal -Force | Out-Null
 
 # --- Watchdog: never touches the broker; only reads the heartbeat and alerts ---
-$wdAction = New-ScheduledTaskAction -Execute $PythonExe `
-    -Argument "-m ibagent watchdog --mandate `"$mandate`"" -WorkingDirectory $RepoDir
+$wdAction = New-ScheduledTaskAction -Execute $pythonw `
+    -Argument "-m ibagent watchdog --mandate `"$mandate`"" -WorkingDirectory $RepoDir  # pythonw:
+    # a console python.exe here flashes a cmd window every 5 minutes on the user's desktop
 $wdTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 5)
 $wdSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 4) -StartWhenAvailable `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
