@@ -141,10 +141,38 @@ def test_capital_ledger_syncs_into_book(env):
 def test_watchdog(env, tmp_path):
     m, broker, sup, clock, tmp = env
     hb = tmp / "heartbeat.txt"
+    st = tmp / "watchdog_state.json"
     sup.tick(clock())                                      # writes heartbeat at NOW
-    alerter = Alerter([])
-    assert watchdog_check(m, hb, tmp / "book.json", now=NOW + timedelta(minutes=5), alerter=alerter) == 0
-    assert watchdog_check(m, hb, tmp / "book.json", now=NOW + timedelta(minutes=30), alerter=alerter) == 1
+
+    class CountingAlerter(Alerter):
+        def __init__(self):
+            super().__init__([])
+            self.sent = []
+
+        def send(self, level, title, body="", dedupe=True):
+            self.sent.append((level, title))
+            return True
+
+    a = CountingAlerter()
+    args = dict(heartbeat_path=hb, book_path=tmp / "book.json", alerter=a, state_path=st)
+    assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args) == 0
+    assert a.sent == []                                    # healthy, never-stale: silent
+    # outage begins: exactly ONE critical, then silence on the 5-min rechecks
+    assert watchdog_check(m, now=NOW + timedelta(minutes=30), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=35), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=40), **args) == 1
+    assert [lvl for lvl, _ in a.sent] == ["critical"]
+    # an hour in: one warning reminder
+    assert watchdog_check(m, now=NOW + timedelta(minutes=95), **args) == 1
+    assert [lvl for lvl, _ in a.sent] == ["critical", "warning"]
+    # recovery: one info, state cleared
+    hb.write_text((NOW + timedelta(minutes=100)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=101), **args) == 0
+    assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info"]
+    # missing heartbeat while a book exists = same episode logic
     missing = tmp / "nope.txt"
     (tmp / "book.json").write_text("{}", encoding="utf-8")
-    assert watchdog_check(m, missing, tmp / "book.json", now=NOW, alerter=alerter) == 1
+    args2 = dict(heartbeat_path=missing, book_path=tmp / "book.json", alerter=a, state_path=st)
+    assert watchdog_check(m, now=NOW, **args2) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args2) == 1
+    assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info", "critical"]

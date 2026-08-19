@@ -1,5 +1,29 @@
 # Live-session learnings
 
+## 2026-08-18 — day 2 close: alert fatigue is a failure mode too
+
+- **Day 2 result: −$29.99 (−0.30%); fees $2.** Book at the close: VTI 7 + SGOV 19 (core),
+  SMH 1 (down on the day) + BAC 9 (up slightly). LLY/MRK re-entry still queued — the make-up
+  run was blocked by the AI cap, tomorrow's 09:50 in-RTH daily is their first real shot.
+- **The owner mutes what spams him — then the alert channel is worthless.** The watchdog
+  fired a 🚨 every 5 minutes through every restart and PC-sleep. Benjamin's reaction was
+  "stop, I don't care": exactly how a real safety channel dies. Watchdog now has hysteresis:
+  one 🚨 when an outage starts, one ✅ when it recovers, at most one reminder/hour between.
+  Rule: an alert that repeats without new information trains the human to ignore ALL alerts.
+- **The owner's usage pattern beats the design assumption.** Planned: ~4 model runs/day.
+  Reality day 2: 8+ (six Q&A chats). The cap (now 40 as runaway backstop), the 2-slot
+  trading reservation, and in-RTH scheduling all came from watching real use, not the spec.
+- **Q&A journaling mislabeled success as failure** (`ok:false` with the answer inside the
+  error field) because schema-less runs reused the decision parser's ok. The answers were
+  delivered all along — with the requested bullet formatting. Fixed; forensics must
+  distinguish "no JSON decision" from "failed".
+- **Console-subprocess hygiene on Windows**: the watchdog's python.exe flashed a cmd window
+  on the desktop every 5 minutes (owner noticed while gaming). Scheduled tasks that share a
+  desktop with a human must use pythonw. Cosmetics are adoption-critical.
+- **The invalid-mandate fail-safe worked in anger**: setting cap 40 against a config ceiling
+  of 20 made the supervisor refuse to start (task "Ready", not "Running") — caught within a
+  minute because the restart dance always ends with a state check. Keep that habit.
+
 ## 2026-08-18 — day 2: the scheduling-vs-market-hours bug family, and forcing the skills
 
 - **Every decision maker must run while the market can act on it.** Third instance of the

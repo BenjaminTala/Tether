@@ -605,8 +605,11 @@ class Supervisor:
                   "decisions happen in the scheduled runs under the mandate.")
         res = runner.run(RunRequest(run_type="daily", bundle_dir=bundle_dir, prompt=prompt))
         answer = (res.text or "").strip() or f"(no answer: {res.error})"
-        self.journal.record("qa", {"question": question[:300], "ok": res.ok,
-                                   "duration_s": res.duration_s, "error": (res.error or "")[:400]})
+        # a schema-less QA run is "ok" when it produced text; res.ok expects a JSON decision
+        qa_ok = bool((res.text or "").strip())
+        self.journal.record("qa", {"question": question[:300], "ok": qa_ok,
+                                   "duration_s": res.duration_s,
+                                   "error": "" if qa_ok else (res.error or "")[:400]})
         if self.m.journal.keep_raw_llm_output and (res.raw_stdout or res.raw_stderr):
             stamp = f"{now:%Y%m%d-%H%M%S}-qa"
             self.journal.save_blob(f"{stamp}-stdout.txt", res.raw_stdout or "")
