@@ -339,7 +339,10 @@ class Book:
         return True
 
     def add_cooldown(self, symbol: str, today: date, cooldown_days: int) -> None:
-        """Per-symbol entry lock; overlapping locks keep the LATEST release date."""
+        """Per-symbol entry lock; overlapping locks keep the LATEST release date.
+        0 days = no lock (day-trader variants re-enter the same session)."""
+        if cooldown_days <= 0:
+            return
         until = _iso(add_trading_days(today, cooldown_days))
         cur = self.cooldowns.get(symbol, "")
         if until > cur:

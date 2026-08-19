@@ -1,0 +1,39 @@
+# Shadow variant "scalper" - the day trader: a model decision every 30 minutes of the
+# session, same-day re-entry allowed, tight stops, tiny targets, maximum turnover.
+#
+# HONEST EXPERIMENT NOTE: quotes are ~15 min delayed and fees are $1/side. The hypothesis
+# being TESTED is that high-frequency activity on this data loses to turtle's indexing.
+# If scalper somehow wins anyway, that is genuinely interesting information.
+description: >
+  Day trader: intraday model runs every 30 min, no re-entry cooldowns, 1.0-ATR stops,
+  quick exits (+1R partials, +8% spec target, 1-day time stop), turnover cap 300%/week.
+overrides:
+  capital.seed_usd: 10000
+  broker.client_id: 22
+  sleeves.core.weight: 0.10
+  sleeves.trend.weight: 0.40
+  sleeves.trend.max_positions: 3
+  sleeves.spec.weight: 0.40
+  sleeves.spec.max_positions: 4
+  sleeves.cash.weight: 0.10
+  risk.max_position_weight_pct: {core: 0.35, trend: 0.18, spec: 0.10}
+  risk.max_new_positions_per_week: 40
+  risk.max_turnover_pct_per_week: 3.0
+  risk.cooldown_days_after_exit: 0
+  risk.cooldown_days_after_stop_out: 0
+  risk.stops.atr_multiple: {trend: 1.0, spec: 1.0}
+  risk.stops.min_distance_pct: 0.01
+  risk.stops.pct_distance: {trend: 0.03, spec: 0.03}
+  risk.stops.max_distance_pct: {trend: 0.05, spec: 0.05}
+  risk.targets.trend.partial_take_r: 1.0
+  risk.targets.trend.trail_atr_multiple: 1.5
+  risk.targets.spec.take_profit_pct: 0.08
+  risk.targets.spec.time_stop_trading_days: 1
+  cadence.intraday_minutes: 30
+  cadence.event.max_per_day: 4
+  execution.no_trade_first_minutes: 5
+  execution.no_trade_last_minutes: 5
+  llm.daily_invocation_cap: 25
+  llm.sandbox.runs_root: "C:/Users/Benjamin/AppData/Local/ibagent/runs-scalper"
+  journal.dir: "data-shadows/scalper/journal"
+  alerts.channels: ["stdout"]

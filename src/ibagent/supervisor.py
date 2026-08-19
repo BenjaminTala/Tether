@@ -56,6 +56,7 @@ class ScheduleState:
     last_news_poll_ts: float = 0.0
     last_protective_ts: float = 0.0
     last_status_ts: float = 0.0
+    last_intraday_ts: float = 0.0
     telegram_offset: int = 0
     last_fleet_digest: str = ""          # ISO Monday of the last FLEET.md digest (main only)
     last_fill_sync: str = ""             # ISO datetime
@@ -361,6 +362,22 @@ class Supervisor:
         if is_trading_day(today) and is_rth(now) \
                 and now.timestamp() - self.state.last_status_ts >= STATUS_UPDATE_SPACING_S:
             self._status_update(now)
+
+        # Intraday variant runs (day-trader shadows): an extra model decision every N minutes
+        # of the regular session, budgeted by the same daily invocation cap as everything else.
+        im = self.m.cadence.intraday_minutes
+        if im > 0 and is_trading_day(today) and is_rth(now) \
+                and now.timestamp() - self.state.last_intraday_ts >= im * 60:
+            self.state.last_intraday_ts = now.timestamp()
+            self.state.save(self.data_dir / "schedule_state.json")
+            self._agent_job("event", now, event_note=(
+                "# Intraday scan (scheduled, not news-triggered)\n\n"
+                f"You run every {im} minutes during market hours as the fleet's day-trading "
+                "variant. Work fast: check held positions against their theses and intraday "
+                "moves, and take good short-horizon setups when they exist. REMEMBER: your "
+                "quotes are ~15 minutes delayed — do not fight for pennies the delay already "
+                "ate; only act when the edge plausibly survives the delay and $1/side fees. "
+                "no_change is always acceptable; overtrading is in your failure-modes list."))
 
         weekday = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")[local.weekday()]
         if is_trading_day(today) and weekday == c.weekly_review.day \

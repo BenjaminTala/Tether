@@ -327,6 +327,8 @@ class CadenceCfg(Strict):
     fast_loop_seconds: int = Field(ge=15, le=600)
     slow_loop_seconds: int = Field(ge=60, le=3600)
     news_poll_seconds: int = Field(ge=60, le=7200)
+    intraday_minutes: int = Field(ge=0, le=240, default=0)  # 0 = off; >0 fires an extra
+    # model run every N minutes during RTH (day-trader variants; counts against the AI cap)
 
 
 class SandboxCfg(Strict):

@@ -219,6 +219,8 @@ cadence:                            # times in market_timezone
   slow_loop_seconds: 300                     # off-hours connectivity + heartbeat
   news_poll_seconds: 300            # near-continuous deterministic stream (free RSS); the
                                     # event gate still decides when the AI is woken
+  intraday_minutes: 0               # 0 = off (main agent). Day-trader shadows override this
+                                    # to run an extra model decision every N minutes of RTH.
 
 llm:
   runner: claude_code               # claude_code | api (future; requires key — not used in v1)
