@@ -165,6 +165,59 @@ def _build_supervisor(m: Mandate):
     return Supervisor(m, broker)
 
 
+def _load_shadow(args: argparse.Namespace, name: str) -> Mandate:
+    """Base mandate + the variant's overrides + the isolation the fleet depends on."""
+    import yaml
+    spec_path = Path("shadows") / f"{name}.yaml"
+    if not spec_path.is_file():
+        raise RuntimeError(f"unknown shadow '{name}' (no {spec_path})")
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    overrides: Dict[str, Any] = dict(parse_override(s) for s in (args.set or []))
+    overrides.update(spec.get("overrides", {}))
+    overrides.setdefault("journal.dir", f"data-shadows/{name}/journal")
+    overrides.setdefault("alerts.channels", ["stdout"])
+    return load_mandate(args.mandate, overrides)
+
+
+def _build_shadow_supervisor(m: Mandate, name: str):
+    from ibagent.broker.ibkr import IBKRBroker
+    from ibagent.broker.shadow import ShadowBroker
+    from ibagent.broker.sim import SimBroker, SimConfig
+    from ibagent.supervisor import Supervisor
+    data_dir = Path("data-shadows") / name
+    ledger = CapitalLedger(data_dir / "capital_events.jsonl")
+    if not ledger.is_initialized():
+        ledger.init_seed(m.capital.seed_usd, note=f"shadow '{name}' auto-seed (simulated cash)")
+    data = IBKRBroker(m.broker, account_id=m.account.ibkr_account_id, base_currency=m.base_currency)
+    sim = SimBroker(SimConfig(initial_cash=ledger.net_contributions(),
+                              commission_model=m.capital.commission_model))
+    from datetime import datetime, timezone
+    sim.set_time(datetime.now(timezone.utc))
+    return Supervisor(m, ShadowBroker(data, sim), data_dir=data_dir, variant_name=name)
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    """Fleet scoreboard from each variant's last daily report (equity marked by its own run)."""
+    from ibagent.journal import Journal
+    rows = []
+    for label, jdir in [("main", Path("data") / "journal")] + \
+            [(p.name, p / "journal") for p in sorted(Path("data-shadows").glob("*")) if p.is_dir()]:
+        if not jdir.is_dir():
+            continue
+        reports = Journal(jdir).tail(1, kinds=("daily_report",))
+        eq = reports[-1]["payload"].get("equity") if reports else None
+        from ibagent.book import Book
+        b = Book.load((jdir.parent if label != "main" else Path("data")) / "book.json")
+        rows.append((label, eq, b.net_contributions, len(b.positions),
+                     sum(b.realized_pnl.values())))
+    print(f"{'VARIANT':<10}{'EQUITY':>12}{'PUT IN':>10}{'ALL-TIME':>10}{'POS':>5}{'REALIZED':>10}")
+    for label, eq, contrib, npos, realized in rows:
+        eq_s = f"{eq:,.2f}" if eq else "n/a"
+        pnl_s = f"{eq - contrib:+,.2f}" if eq else "n/a"
+        print(f"{label:<10}{eq_s:>12}{contrib:>10,.0f}{pnl_s:>10}{npos:>5}{realized:>+10.2f}")
+    return 0
+
+
 def _live_gate(m: Mandate) -> None:
     import os
     if m.mode == "live" and os.environ.get(m.go_live_gate.ack_env_var) != m.go_live_gate.ack_value:
@@ -188,6 +241,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_supervise(args: argparse.Namespace) -> int:
+    if getattr(args, "shadow", None):
+        m = _load_shadow(args, args.shadow)
+        if m.mode != "paper":
+            raise RuntimeError("shadows are simulation-only; mode must be paper")
+        sup = _build_shadow_supervisor(m, args.shadow)
+        sup.run()
+        return 0
     m = _load(args)
     _live_gate(m)
     sup = _build_supervisor(m)
@@ -256,9 +316,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sp("run", help="run one agent cycle now")
     run.add_argument("run_type", choices=["weekly", "daily", "event"])
-    sp("supervise", help="start the long-running supervisor")
+    sup = sp("supervise", help="start the long-running supervisor")
+    sup.add_argument("--shadow", help="run a simulated-money variant from shadows/<name>.yaml")
     sp("watchdog", help="heartbeat watchdog, run by Task Scheduler")
     sp("status", help="print the engine book (no broker connection)")
+    sp("compare", help="fleet scoreboard: main vs shadow variants")
     return p
 
 
@@ -287,6 +349,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_watchdog(args)
         if args.cmd == "status":
             return cmd_status(args)
+        if args.cmd == "compare":
+            return cmd_compare(args)
     except (MandateError, LedgerError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

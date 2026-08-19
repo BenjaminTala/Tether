@@ -57,6 +57,7 @@ class ScheduleState:
     last_protective_ts: float = 0.0
     last_status_ts: float = 0.0
     telegram_offset: int = 0
+    last_fleet_digest: str = ""          # ISO Monday of the last FLEET.md digest (main only)
     last_fill_sync: str = ""             # ISO datetime
     watchlist: List[str] = field(default_factory=list)
     event_gate: dict = field(default_factory=dict)
@@ -90,9 +91,11 @@ class Supervisor:
                  data_dir: Path = DATA_DIR, alerter: Optional[Alerter] = None,
                  now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  sleeper: Callable[[float], None] = time.sleep,
-                 feeds: Optional[Sequence[str]] = None, skills_dir: Optional[Path] = None):
+                 feeds: Optional[Sequence[str]] = None, skills_dir: Optional[Path] = None,
+                 variant_name: str = "main"):
         self.m = mandate
         self.broker = broker
+        self.variant_name = variant_name
         self.now_fn = now_fn
         self.sleep = sleeper
         self.data_dir = Path(data_dir)
@@ -681,9 +684,69 @@ class Supervisor:
                              f"{mark:>9.2f}{pnl:>+9.2f}  {stop}")
         else:
             lines += ["", "no open positions"]
+        if self.variant_name == "main":
+            fleet = self._fleet_lines()
+            if fleet:
+                lines += ["", "🧪 Shadow fleet (same brain, simulated money):"] + fleet
         body = "\n".join(lines)
         self.journal.record("daily_report", {"equity": snap.equity, "text": body})
         self.alerter.info(f"{mood} Daily report — {now.astimezone(self.tz):%a %b %d}", body)
+        if self.variant_name == "main":
+            self._maybe_fleet_digest(now)
+
+    def _fleet_lines(self) -> List[str]:
+        """One line per shadow variant, marked with the main broker's live quotes."""
+        out: List[str] = []
+        for bpath in sorted(Path("data-shadows").glob("*/book.json")):
+            name = bpath.parent.name
+            try:
+                b = Book.load(bpath)
+                prices = {}
+                if b.positions:
+                    quotes = self._quotes(set(b.positions))
+                    prices = {s: (q.mid or q.last) for s, q in quotes.items() if (q.mid or q.last)}
+                snap = b.equity(prices, self.now_fn())
+                out.append(f"• {name}: ${snap.equity:,.2f} "
+                           f"({snap.equity - b.net_contributions:+,.2f} all-time, "
+                           f"{len(b.positions)} pos)")
+            except Exception:
+                out.append(f"• {name}: (cannot mark right now)")
+        return out
+
+    def _maybe_fleet_digest(self, now: datetime) -> None:
+        """Mondays after the close report: append the shared FLEET.md — each variant's week
+        (performance + trades) and the lessons its model wrote for itself. Deterministic
+        aggregation; costs no AI runs."""
+        monday = _monday(now.astimezone(self.tz).date())
+        if now.astimezone(self.tz).weekday() != 0 or self.state.last_fleet_digest == monday:
+            return
+        self.state.last_fleet_digest = monday
+        self.state.save(self.data_dir / "schedule_state.json")
+        try:
+            sections = [f"\n## Week of {monday}\n"]
+            variants = [("main", Path("data") / "journal")] + \
+                       [(p.name, p / "journal") for p in sorted(Path("data-shadows").glob("*"))
+                        if (p / "journal").is_dir()]
+            for name, jdir in variants:
+                j = Journal(jdir)
+                week_cut = f"{monday}T00:00:00"
+                decisions = [e for e in j.tail(60, kinds=("decision",)) if e["ts"] >= week_cut]
+                fills = [e for e in j.tail(120, kinds=("fill",)) if e["ts"] >= week_cut]
+                realized = sum(e["payload"].get("realized", 0) or 0 for e in fills
+                               if isinstance(e["payload"].get("realized"), (int, float)))
+                traded = sorted({e["payload"].get("symbol", "?") for e in fills})
+                lessons = [e["payload"].get("lessons", "") for e in decisions
+                           if e["payload"].get("lessons")]
+                sections.append(f"### {name}\n"
+                                f"- decisions {len(decisions)}, fills {len(fills)} "
+                                f"({', '.join(traded) or 'none'}), realized {realized:+,.2f} $\n")
+                for l in lessons[-2:]:
+                    sections.append(f"- lesson: {l[:400]}\n")
+            with open("FLEET.md", "a", encoding="utf-8") as fh:
+                fh.write("\n".join(sections))
+            self.journal.record("fleet_digest", {"week": monday})
+        except Exception as exc:
+            self.journal.record("warning", {"where": "fleet_digest", "err": str(exc)})
 
     def _fees_and_realized_today(self, now: datetime) -> tuple[float, float]:
         """Sum commissions and realized P&L from today's fills (market-timezone day)."""
