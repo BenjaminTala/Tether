@@ -34,6 +34,12 @@ class SymbolStats:
     above_50d: Optional[bool]
     above_200d: Optional[bool]
     bars: int
+    # Intraday fields — only set when the newest bar IS today (IBKR daily bars include the
+    # live partial bar). None on cached/stale history: absent data must look absent.
+    day_open: Optional[float] = None
+    day_change_from_open: Optional[float] = None   # (last - today's open) / open
+    day_change: Optional[float] = None             # (last - prev close) / prev close
+    day_range_pos: Optional[float] = None          # 0 = at day low, 1 = at day high
 
 
 def atr(bars: Sequence[Bar], period: int = 14) -> Optional[float]:
@@ -84,13 +90,25 @@ def momentum_12_1(closes: Sequence[float]) -> Optional[float]:
     return sum(have) / len(have) if have else None
 
 
-def symbol_stats(symbol: str, bars: Sequence[Bar], atr_period: int = 14) -> Optional[SymbolStats]:
+def symbol_stats(symbol: str, bars: Sequence[Bar], atr_period: int = 14,
+                 today=None) -> Optional[SymbolStats]:
     if not bars:
         return None
     closes = [b.close for b in bars]
     close = closes[-1]
     if close <= 0:
         return None
+    day_open = day_from_open = day_change = day_range_pos = None
+    if today is not None and bars[-1].ts.date() == today and len(bars) >= 2:
+        b = bars[-1]
+        prev = closes[-2]
+        if b.open > 0:
+            day_open = b.open
+            day_from_open = round(close / b.open - 1.0, 5)
+        if prev > 0:
+            day_change = round(close / prev - 1.0, 5)
+        if b.high > b.low:
+            day_range_pos = round((close - b.low) / (b.high - b.low), 3)
     a = atr(bars, atr_period)
     high_52 = max((b.high for b in bars[-TRADING_DAYS["12m"]:]), default=None) \
         if len(bars) >= TRADING_DAYS["6m"] else None
@@ -110,13 +128,18 @@ def symbol_stats(symbol: str, bars: Sequence[Bar], atr_period: int = 14) -> Opti
         above_50d=(close > ma50) if ma50 is not None else None,
         above_200d=(close > ma200) if ma200 is not None else None,
         bars=len(bars),
+        day_open=day_open,
+        day_change_from_open=day_from_open,
+        day_change=day_change,
+        day_range_pos=day_range_pos,
     )
 
 
-def stats_table(bars_by_symbol: Dict[str, Sequence[Bar]], atr_period: int = 14) -> Dict[str, SymbolStats]:
+def stats_table(bars_by_symbol: Dict[str, Sequence[Bar]], atr_period: int = 14,
+                today=None) -> Dict[str, SymbolStats]:
     out: Dict[str, SymbolStats] = {}
     for sym, bars in sorted(bars_by_symbol.items()):
-        s = symbol_stats(sym, bars, atr_period)
+        s = symbol_stats(sym, bars, atr_period, today=today)
         if s is not None:
             out[sym] = s
     return out

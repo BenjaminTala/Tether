@@ -17,6 +17,8 @@ overrides:
   sleeves.spec.max_positions: 4
   sleeves.cash.weight: 0.10
   risk.max_position_weight_pct: {core: 0.35, trend: 0.18, spec: 0.10}
+  risk.max_extension_atr: 3.0     # a day trader RIDES intraday momentum; the 1.5-ATR
+                                  # swing-trader chasing gate was vetoing its entire playbook
   risk.max_new_positions_per_week: 40
   risk.max_turnover_pct_per_week: 3.0
   risk.cooldown_days_after_exit: 0

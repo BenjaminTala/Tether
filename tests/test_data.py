@@ -60,3 +60,20 @@ def test_symbol_stats_sparse_history_fails_closed():
 def test_sma():
     assert sma([1, 2, 3, 4], 2) == 3.5
     assert sma([1], 2) is None
+
+
+def test_intraday_fields_only_when_last_bar_is_today():
+    from datetime import date
+    bars = make_bars([100.0, 102.0])
+    bars[-1] = Bar(ts=bars[-1].ts, open=101.0, high=103.0, low=100.5, close=102.0, volume=1000)
+    today = bars[-1].ts.date()
+    s = symbol_stats("X", bars, today=today)
+    assert s.day_open == 101.0
+    assert s.day_change_from_open == pytest.approx(102.0 / 101.0 - 1, abs=1e-4)
+    assert s.day_change == pytest.approx(0.02, abs=1e-4)
+    assert s.day_range_pos == pytest.approx((102.0 - 100.5) / (103.0 - 100.5), abs=1e-3)
+    # cached/stale history (last bar not today) -> all intraday fields None
+    stale = symbol_stats("X", bars, today=date(2030, 1, 1))
+    assert stale.day_open is None and stale.day_change is None and stale.day_range_pos is None
+    # no `today` context -> None as well
+    assert symbol_stats("X", bars).day_open is None

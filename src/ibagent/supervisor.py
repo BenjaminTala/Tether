@@ -371,13 +371,26 @@ class Supervisor:
             self.state.last_intraday_ts = now.timestamp()
             self.state.save(self.data_dir / "schedule_state.json")
             self._agent_job("event", now, event_note=(
-                "# Intraday scan (scheduled, not news-triggered)\n\n"
-                f"You run every {im} minutes during market hours as the fleet's day-trading "
-                "variant. Work fast: check held positions against their theses and intraday "
-                "moves, and take good short-horizon setups when they exist. REMEMBER: your "
-                "quotes are ~15 minutes delayed — do not fight for pennies the delay already "
-                "ate; only act when the edge plausibly survives the delay and $1/side fees. "
-                "no_change is always acceptable; overtrading is in your failure-modes list."))
+                "# Intraday scan — you are the fleet's DAY TRADER\n\n"
+                f"You run every {im} minutes of the session. market.json now carries TODAY'S "
+                "tape for the whole whitelist: `day_change` (vs yesterday's close), "
+                "`day_change_from_open`, and `day_range_pos` (1.0 = at the day's high). "
+                "Held/watched/mover symbols are refreshed this run; the rest may be hours old "
+                "— check `day_change` is present before trusting a row.\n\n"
+                "Your playbook (skills still bind, your mandate's looser extension cap "
+                "applies):\n"
+                "1. MANAGE first: held positions near stops/targets — tighten or exit.\n"
+                "2. CONTINUATION: a whitelisted name up 1.5%+ from the open, holding the top "
+                "third of its day range (day_range_pos > 0.6), with the market flat-or-green "
+                "-> ride it with a tight stop below today's consolidation. This is your "
+                "bread-and-butter trade and it survives a 15-min delay.\n"
+                "3. NEWS LEGS: a digest catalyst from TODAY whose move is still developing "
+                "(not a spike already at day's high after 2pm).\n"
+                "4. AVOID: fading moves (no shorts anyway), first-30-min whipsaw, entries a "
+                "few minutes before the close, and anything whose edge is smaller than the "
+                "delay + $2 round-trip.\n"
+                "A good day-trading day is 1-3 trades; zero on a dead tape is fine — but if "
+                "you end every day at zero, say in `notes_for_human` what stopped you."))
 
         weekday = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")[local.weekday()]
         if is_trading_day(today) and weekday == c.weekly_review.day \
@@ -476,7 +489,25 @@ class Supervisor:
         symbols = self._symbols_for_run(run_type)
         quotes = self._quotes(symbols)
         bars = self._bars(sorted(symbols), now)
-        stats = stats_table(bars, self.m.risk.stops.atr_period)
+        today_local = now.astimezone(self.tz).date()
+        stats = stats_table(bars, self.m.risk.stops.atr_period, today=today_local)
+        if self.m.cadence.intraday_minutes > 0 and run_type == "event":
+            # Day-trader freshness: the per-day bar cache is hours stale by mid-session.
+            # Refetch just a focus set (held + watchlist + biggest movers) so the model sees
+            # TODAY'S move-from-open, not this morning's.
+            from ibagent.data import momentum_rank
+            movers = sorted((s for s in stats.values() if s.day_change is not None),
+                            key=lambda s: -abs(s.day_change))[:10]
+            focus = set(self.book.positions) | set(self.state.watchlist) \
+                | {s.symbol for s in movers} | set(momentum_rank(stats)[:8])
+            for sym in sorted(focus):
+                try:
+                    self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
+                    fresh = stats_table({sym: self._bars_cache[sym]},
+                                        self.m.risk.stops.atr_period, today=today_local)
+                    stats.update(fresh)
+                except Exception:
+                    continue
         atrs = {s: v.atr for s, v in stats.items() if v.atr}
         held = set(self.book.positions)
         digest = build_digest(self._scored_recent, held, set(self.state.watchlist))
@@ -492,7 +523,9 @@ class Supervisor:
     def _symbols_for_run(self, run_type: str) -> Set[str]:
         held = set(self.book.positions)
         core = set(self.m.universe.active.core_holdings)
-        if run_type == "weekly":
+        if run_type == "weekly" or self.m.cadence.intraday_minutes > 0:
+            # Weekly reviews and day-trader variants scan the WHOLE whitelist: a scalper
+            # whose surface is only its own holdings has nothing to hunt.
             return held | core | {i.symbol for i in self.m.universe.active.instruments}
         return held | core | set(self.state.watchlist)
 
