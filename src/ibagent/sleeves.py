@@ -109,7 +109,7 @@ def evaluate_breakers(mandate: Mandate, book: Book, snap: EquitySnapshot) -> Bre
     halt = book.halted
     if halt:
         reasons.append(f"halted: {book.halted_reason}")
-    dd_total = book.drawdown(snap, "total")
+    dd_total = book.drawdown(snap)
     if dd_total >= cb.total_drawdown_halt_pct:
         halt = True
         reasons.append(f"total drawdown {dd_total:.1%} >= {cb.total_drawdown_halt_pct:.0%} (halt)")
@@ -120,10 +120,14 @@ def evaluate_breakers(mandate: Mandate, book: Book, snap: EquitySnapshot) -> Bre
             paused.add(sleeve)
             reasons.append(f"{sleeve} paused until {book.paused_sleeves[sleeve]}")
             continue
-        dd = book.drawdown(snap, sleeve)
-        if dd >= cb.sleeve_drawdown_pause_pct:
+        # P&L give-back vs the sleeve's TARGET size: protective exits move value to cash
+        # and must not read as drawdown — only actual losses pause a sleeve.
+        target = mandate.sleeves.get(sleeve).weight * snap.equity
+        giveback = book.sleeve_giveback_usd(snap, sleeve)
+        if target > 0 and giveback >= cb.sleeve_drawdown_pause_pct * target:
             paused.add(sleeve)
-            reasons.append(f"{sleeve} drawdown {dd:.1%} >= {cb.sleeve_drawdown_pause_pct:.0%} (pause)")
+            reasons.append(f"{sleeve} gave back ${giveback:,.0f} >= "
+                           f"{cb.sleeve_drawdown_pause_pct:.0%} of its ${target:,.0f} target (pause)")
     if book.consecutive_spec_losers >= cb.consecutive_losers_pause:
         paused.add("spec")
         reasons.append(f"{book.consecutive_spec_losers} consecutive spec losers (pause)")
@@ -159,9 +163,9 @@ def evaluate_breakers(mandate: Mandate, book: Book, snap: EquitySnapshot) -> Bre
                     f"{book.consecutive_active_losers} losing trades in a row (cooldown)")
 
     risk_scale = 1.0
-    if not halt and book.drawdown(snap, "total") >= cb.half_risk_drawdown_pct:
+    if not halt and book.drawdown(snap) >= cb.half_risk_drawdown_pct:
         risk_scale = 0.5
-        reasons.append(f"drawdown {book.drawdown(snap, 'total'):.1%} >= "
+        reasons.append(f"drawdown {book.drawdown(snap):.1%} >= "
                        f"{cb.half_risk_drawdown_pct:.0%}: HALF RISK until a new equity high")
 
     return BreakerState(halt=halt, pause_all_entries=pause_all, pause_entries_until=pause_until,

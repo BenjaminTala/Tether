@@ -71,13 +71,23 @@ def test_total_drawdown_halts(mandate, tmp_path):
     assert state.halt and any("total drawdown" in r for r in state.reasons)
 
 
-def test_sleeve_drawdown_pauses(mandate, tmp_path):
+def test_sleeve_drawdown_pauses_on_losses_not_exits(mandate, tmp_path):
     b = make_book(tmp_path, 1000)
     enter(b, "QQQ", "trend", 2, 100, stop=92)
-    b.hwm["trend"] = 300.0                                             # trend value now 2x75=150
-    snap = b.equity({"QQQ": 75}, NOW)
+    # real losses: price 70 -> P&L give-back ~$60.7 (basis 100.35), > 20% of the ~$282
+    # trend target -> pause
+    snap = b.equity({"QQQ": 70}, NOW)
     state = evaluate_breakers(mandate, b, snap)
     assert "trend" in state.paused_sleeves and not state.halt
+    # a near-flat EXIT (value leaves the sleeve, P&L intact) must NOT pause
+    b2 = make_book(tmp_path / "b2", 1000)
+    enter(b2, "SPY", "trend", 2, 100, stop=92)
+    s0 = b2.equity({"SPY": 100}, NOW)
+    b2.update_hwm(s0)
+    b2.apply_fill(fill("SPY", "SELL", 2, 100.5), "trend")
+    s1 = b2.equity({}, NOW)
+    state2 = evaluate_breakers(mandate, b2, s1)
+    assert "trend" not in state2.paused_sleeves
 
 
 def test_daily_loss_pauses_entries(mandate, tmp_path):

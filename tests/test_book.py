@@ -96,8 +96,18 @@ def test_equity_hwm_drawdown_and_missing_price(tmp_path):
     assert snap.equity == pytest.approx(b.pot_cash + 220, abs=0.01)
     b.update_hwm(snap)
     lower = b.equity({"VTI": 90}, NOW)
-    assert b.drawdown(lower, "total") > 0
-    assert b.drawdown(lower, "core") == pytest.approx((220 - 180) / 220)
+    assert b.drawdown(lower) > 0
+    # sleeve give-back is P&L-based: at the 110 mark core P&L peaked at (220 - basis);
+    # at 90 it fell by 2 shares x $20 -> $40 given back
+    assert b.sleeve_giveback_usd(lower, "core") == pytest.approx(40.0, abs=0.1)
+    # a protective EXIT must not register as sleeve drawdown
+    b2 = make_book(tmp_path / "b2", 1000)
+    b2.apply_fill(fill("QQQ", "BUY", 2, 100), "trend", entry_meta={}, counts_as_new=True)
+    s0 = b2.equity({"QQQ": 100}, NOW)
+    b2.update_hwm(s0)
+    b2.apply_fill(fill("QQQ", "SELL", 2, 100.4), "trend")   # exit near flat
+    s1 = b2.equity({}, NOW)
+    assert b2.sleeve_giveback_usd(s1, "trend") < 5          # value halved, P&L did not
     with pytest.raises(BookError):
         b.equity({}, NOW)                                              # fail closed on missing price
 

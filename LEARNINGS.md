@@ -1,5 +1,21 @@
 # Live-session learnings
 
+## 2026-08-21 — day 5: "why is everyone losing?" has a quantitative answer, and it found a bug
+
+- **Attribution before blame.** VTI −0.91% since the fleet's entries; SMH −5.7% on the
+  week. Every variant is DOWN LESS than the market (−0.45% to −0.83%): the losses are beta
+  in a red week, cushioned by cash buffers and stops. Two real trading mistakes exist —
+  sniper and swing each bought the HD dip and were wrong (~−$29 each) — tuition, journaled.
+- **Owner questions are a test suite.** "Why are all losing?" exposed that the sleeve
+  drawdown breaker measured MARKET VALUE, so BAC's protective stop-out (value → cash)
+  read as a 50% sleeve crash and falsely paused main's trend sleeve for a month; sniper
+  and swing got the same false pause from their HD exits. Defense was being punished as
+  disaster. Fixed: sleeve breakers now track cumulative P&L give-back from the sleeve's
+  P&L high-water, scaled by the sleeve's target size; exits are invisible to it. Three
+  false pauses lifted; regression tests pin exit-vs-loss behavior.
+- **Design rule extracted**: any breaker metric must be invariant under the system's own
+  protective actions — otherwise the machine punishes itself for working.
+
 ## 2026-08-20 — day 4: first stop-out, and the day trader who wouldn't trade
 
 - **First full defend-and-exit cycle worked end to end.** BAC hit its trailing stop at

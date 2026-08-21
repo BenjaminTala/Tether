@@ -90,6 +90,8 @@ class EquitySnapshot:
     positions_value: float
     equity: float
     sleeve_value: Dict[str, float]        # market value per sleeve (cash excluded)
+    sleeve_basis: Dict[str, float]        # cost basis per sleeve (qty x avg_cost)
+    sleeve_pnl: Dict[str, float]          # realized + (value - basis): survives exits
     sleeve_equity: Dict[str, float]       # core/trend/spec value; 'cash' = pot_cash
 
 
@@ -112,6 +114,7 @@ class Book:
         self.realized_pnl: Dict[str, float] = {"core": 0.0, "trend": 0.0, "spec": 0.0}
         self.spec_profit_since_sweep: float = 0.0
         self.hwm: Dict[str, float] = {"total": 0.0, "core": 0.0, "trend": 0.0, "spec": 0.0}
+        self.hwm_pnl: Dict[str, float] = {"core": 0.0, "trend": 0.0, "spec": 0.0}
         self.day_date: str = ""
         self.day_start_equity: float = 0.0
         self.week_start: str = ""
@@ -161,6 +164,7 @@ class Book:
             book.pending_settlements = [tuple(x) for x in data["pending_settlements"]]
             book.realized_pnl = dict(data["realized_pnl"])
             book.hwm = dict(data["hwm"])
+            book.hwm_pnl = dict(data.get("hwm_pnl", {"core": 0.0, "trend": 0.0, "spec": 0.0}))
             book.cooldowns = dict(data["cooldowns"])
             book.paused_sleeves = dict(data["paused_sleeves"])
             book.stopout_history = {k: list(v) for k, v in data.get("stopout_history", {}).items()}
@@ -180,6 +184,7 @@ class Book:
             "realized_pnl": self.realized_pnl,
             "spec_profit_since_sweep": self.spec_profit_since_sweep,
             "hwm": self.hwm,
+            "hwm_pnl": self.hwm_pnl,
             "day_date": self.day_date,
             "day_start_equity": self.day_start_equity,
             "week_start": self.week_start,
@@ -390,8 +395,10 @@ class Book:
         if missing:
             raise BookError(f"no price for held symbols: {missing}")
         sleeve_value = {"core": 0.0, "trend": 0.0, "spec": 0.0}
+        sleeve_basis = {"core": 0.0, "trend": 0.0, "spec": 0.0}
         for pos in self.positions.values():
             sleeve_value[pos.sleeve] += pos.qty * prices[pos.symbol]
+            sleeve_basis[pos.sleeve] += pos.qty * pos.avg_cost
         total_value = sum(sleeve_value.values())
         ts = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         today = ts.date()
@@ -402,6 +409,9 @@ class Book:
             positions_value=round(total_value, 2),
             equity=round(self.pot_cash + total_value, 2),
             sleeve_value={k: round(v, 2) for k, v in sleeve_value.items()},
+            sleeve_basis={k: round(v, 2) for k, v in sleeve_basis.items()},
+            sleeve_pnl={k: round(self.realized_pnl[k] + sleeve_value[k] - sleeve_basis[k], 2)
+                        for k in sleeve_value},
             sleeve_equity={**{k: round(v, 2) for k, v in sleeve_value.items()},
                            "cash": round(self.pot_cash, 2)},
         )
@@ -409,15 +419,22 @@ class Book:
     def update_hwm(self, snap: EquitySnapshot) -> None:
         self.hwm["total"] = max(self.hwm["total"], snap.equity)
         for s in ("core", "trend", "spec"):
-            self.hwm[s] = max(self.hwm[s], snap.sleeve_value[s])
+            # Sleeve high-water marks track cumulative P&L, not market value: a protective
+            # exit moves value to cash and must NOT read as a drawdown (2026-08-21 bug:
+            # BAC's stop-out halved the trend sleeve's value and falsely paused it a month).
+            self.hwm_pnl[s] = max(self.hwm_pnl.get(s, 0.0), snap.sleeve_pnl[s])
 
-    def drawdown(self, snap: EquitySnapshot, scope: str = "total") -> float:
-        """Fractional drawdown from HWM (0 = at high). scope: total|core|trend|spec."""
-        peak = self.hwm.get(scope, 0.0)
+    def drawdown(self, snap: EquitySnapshot) -> float:
+        """Fractional TOTAL-equity drawdown from the high-water mark."""
+        peak = self.hwm.get("total", 0.0)
         if peak <= 0:
             return 0.0
-        cur = snap.equity if scope == "total" else snap.sleeve_value[scope]
-        return max(0.0, (peak - cur) / peak)
+        return max(0.0, (peak - snap.equity) / peak)
+
+    def sleeve_giveback_usd(self, snap: EquitySnapshot, sleeve: str) -> float:
+        """Dollars of P&L the sleeve has given back from its P&L high-water. Immune to
+        exits/rebalances shrinking market value — only actual losses count."""
+        return max(0.0, self.hwm_pnl.get(sleeve, 0.0) - snap.sleeve_pnl[sleeve])
 
     def update_high_prices(self, prices: Dict[str, float]) -> None:
         for pos in self.positions.values():
