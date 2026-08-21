@@ -1,5 +1,26 @@
 # Live-session learnings
 
+## 2026-08-20 — day 4: first stop-out, and the day trader who wouldn't trade
+
+- **First full defend-and-exit cycle worked end to end.** BAC hit its trailing stop at
+  11:45 ET: SELL 9 @ 62.63, realized −$23.50 (0.24% of the pot). The trail had been raised
+  from 61.89 → 62.63 on day 1's high, clawing back ~$7 vs the original stop. Cooldown and
+  stop-out history recorded automatically. This is the risk machinery's first live kill —
+  small, controlled, exactly as designed.
+- **Red day across the board**: every variant lost ~0.45–0.55% (semis + yield pressure).
+  turtle "leads" by losing least — consistent with its control-group role so far.
+- **scalper ran ~13 intraday decisions and traded ZERO times.** The forced checklists
+  (anti-chasing, failure-modes, sizing) restrained even the variant told to day trade —
+  it kept its day-1 positions and passed on everything intraday. Two readings: discipline
+  works, or the gates are too tight for a scalping mandate. Watch whether it EVER trades;
+  a day trader that never trades is just an expensive turtle.
+- **LLY has now expired unfilled on 3 consecutive days** (high price + wide ATR + delayed
+  quotes at ask+35bps). A pattern, not luck. Candidate fixes: per-symbol wider offset when
+  ATR% is high, or one automatic retry at a re-fetched quote before giving up. TODO.
+- **OneDrive PermissionError recurred** (now with traceback) and an overnight socket
+  disconnect self-healed. If the OneDrive locks keep appearing, move data/ out of the
+  synced tree — twice is coincidence, three times is a migration.
+
 ## 2026-08-18 — day 2 close: alert fatigue is a failure mode too
 
 - **Day 2 result: −$29.99 (−0.30%); fees $2.** Book at the close: VTI 7 + SGOV 19 (core),
