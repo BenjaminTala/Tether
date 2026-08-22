@@ -198,6 +198,64 @@ def _build_shadow_supervisor(m: Mandate, name: str):
     return Supervisor(m, ShadowBroker(data, sim), data_dir=data_dir, variant_name=name)
 
 
+def cmd_backtest(args: argparse.Namespace) -> int:
+    """Backtest the deterministic strategy skeletons on real IBKR daily history."""
+    from ibagent.backtest import (load_history, make_momentum, run_backtest, save_history,
+                                  strat_core_only, strat_spy)
+    from ibagent.broker.base import Contract
+    m = _load(args)
+    trend_universe = [i.symbol for i in m.universe.active.instruments if "trend" in i.sleeves]
+    symbols = sorted(set(trend_universe) | {"SPY", "VTI", "SGOV"})
+    days = int(args.years * 365)
+    bars: Dict[str, Any] = {}
+    missing = []
+    for s in symbols:
+        h = None if args.refresh else load_history(s)
+        if h and len(h) > days * 0.6:
+            bars[s] = h
+        else:
+            missing.append(s)
+    if missing:
+        from ibagent.broker.ibkr import IBKRBroker
+        cfg = m.broker.model_copy(update={"client_id": 25})
+        b = IBKRBroker(cfg, account_id=m.account.ibkr_account_id, base_currency=m.base_currency)
+        b.connect()
+        try:
+            for i, s in enumerate(missing):
+                try:
+                    h = b.daily_bars(Contract(symbol=s), days)
+                    bars[s] = h
+                    save_history(s, h)
+                    print(f"fetched {s}: {len(h)} bars ({i + 1}/{len(missing)})")
+                except Exception as exc:
+                    print(f"skip {s}: {exc}")
+                b.sleep(2.5)                      # stay under the historical-data pacing limit
+        finally:
+            b.disconnect()
+    have_trend = [s for s in trend_universe if s in bars]
+    runs = [
+        ("spy (benchmark)", {"SPY": bars["SPY"]}, strat_spy, "monthly", None),
+        ("core_only 60/40", {k: bars[k] for k in ("VTI", "SGOV") if k in bars},
+         strat_core_only, "monthly", None),
+        ("momentum top3", {k: bars[k] for k in set(have_trend) | {"SGOV"} if k in bars},
+         make_momentum(have_trend, 3), "monthly", 2.5),
+        ("swing top3 tight", {k: bars[k] for k in set(have_trend) | {"SGOV"} if k in bars},
+         make_momentum(have_trend, 3), "weekly", 2.0),
+    ]
+    print("\nHONESTY NOTES: mechanical rules only (no AI in the loop); today's whitelist =\n"
+          "survivorship bias, so treat results as OPTIMISTIC upper bounds; fills at close\n"
+          f"+{5:g}bps slippage; commissions '{m.capital.commission_model}'.\n")
+    print(f"{'STRATEGY':<20}{'CAGR':>8}{'MAXDD':>8}{'SHARPE':>8}{'TRADES':>8}{'FEES':>9}{'FINAL':>12}")
+    for name, data, strat, cadence, trail in runs:
+        if not data:
+            continue
+        r = run_backtest(name, data, strat, rebalance=cadence, trail_atr=trail,
+                         commission=m.capital.commission_model)
+        print(f"{r.name:<20}{r.cagr:>8.1%}{r.max_drawdown:>8.1%}{r.sharpe:>8.2f}"
+              f"{r.trades:>8}{r.fees:>9.2f}{r.final:>12,.2f}   ({r.start} → {r.end})")
+    return 0
+
+
 def cmd_compare(args: argparse.Namespace) -> int:
     """Fleet scoreboard from each variant's last daily report (equity marked by its own run)."""
     from ibagent.journal import Journal
@@ -323,6 +381,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp("watchdog", help="heartbeat watchdog, run by Task Scheduler")
     sp("status", help="print the engine book (no broker connection)")
     sp("compare", help="fleet scoreboard: main vs shadow variants")
+    bt = sp("backtest", help="backtest the deterministic strategy skeletons on IBKR history")
+    bt.add_argument("--years", type=float, default=3.0)
+    bt.add_argument("--refresh", action="store_true", help="refetch cached history")
     return p
 
 
@@ -353,6 +414,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_status(args)
         if args.cmd == "compare":
             return cmd_compare(args)
+        if args.cmd == "backtest":
+            return cmd_backtest(args)
     except (MandateError, LedgerError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
