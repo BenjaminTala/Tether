@@ -1,0 +1,17 @@
+# Shadow variant "twin" - main's identical twin on TIERED pricing (~$0.35/order vs $1.00).
+# The backtest measured fees as the #1 controllable drag (1.8-3.6% of the pot for active
+# styles). twin turns that into a live A/B: same brain, same mandate, same market - the
+# only differences are tiered commissions and the $100 position floor they allow.
+# The equity gap between main and twin IS the price of the Fixed plan.
+description: >
+  Fee experiment: identical to main but with tiered commissions and the smaller position
+  floor tiered permits. Quantifies, live, what switching the real account would be worth.
+overrides:
+  capital.seed_usd: 10000
+  capital.commission_model: tiered
+  capital.min_position_usd: 100
+  broker.client_id: 23
+  llm.daily_invocation_cap: 12
+  llm.sandbox.runs_root: "C:/Users/Benjamin/AppData/Local/ibagent/runs-twin"
+  journal.dir: "data-shadows/twin/journal"
+  alerts.channels: ["stdout"]

@@ -120,6 +120,54 @@ def test_broker_reject_reported_not_applied(mandate, tmp_path):
     assert "QQQ" not in book.positions and book.pot_cash == 1000
 
 
+def test_unfilled_buy_retries_once_at_fresh_quote(mandate, tmp_path):
+    """LLY-class failure: market ran past a delayed-quote limit -> one retry, higher limit."""
+    from ibagent.book import Book
+    from ibagent.broker.base import OrderStatus
+
+    class RunawayBroker(SimBroker):
+        """First BUY never fills (price already gone); the fresh quote is higher."""
+
+        def __init__(self):
+            super().__init__(SimConfig(initial_cash=1000.0))
+            self.connect()
+            self.set_time(NOW)
+            self.placed = []
+            self.mark_after_first_place = 101.0
+
+        def place(self, req):
+            self.placed.append(req)
+            if len(self.placed) == 1:
+                # simulate: order rests (non-marketable because the real market moved)
+                return OrderStatus(broker_order_id="x1", client_tag=req.client_tag,
+                                   symbol=req.symbol, side=req.side, state="submitted",
+                                   qty=req.qty, ts=NOW)
+            return super().place(req)
+
+        def quote(self, contract):
+            self.mark(contract.symbol, self.mark_after_first_place)   # fresh, higher market
+            return super().quote(contract)
+
+        def cancel(self, oid):
+            if oid != "x1":
+                super().cancel(oid)
+
+    broker = RunawayBroker()
+    broker.set_quote("QQQ", 99.98, 100.02)
+    book = make_book(tmp_path, 1000)
+    ex = Executor(mandate, broker, book, Journal(tmp_path / "journal"), Alerter([]),
+                  sleeper=lambda s: None, now_fn=lambda: NOW)
+    plan = plan_orders(mandate, book, {"QQQ": make_quote("QQQ", 100)}, {}, entry_decision(), NOW)
+    report = ex.execute_plan(plan)
+    buys = [r for r in broker.placed if r.side == "BUY" and r.order_type == "LMT"]
+    assert len(buys) == 2
+    assert buys[1].client_tag.endswith("-R")
+    assert buys[1].limit_price > buys[0].limit_price
+    assert report.filled == 1                              # the retry filled
+    assert "QQQ" in book.positions
+    assert any(r.order_type == "STP" for r in broker.placed)   # protection followed the fill
+
+
 def test_kill_switch_cancels_engine_orders(mandate, tmp_path):
     broker, book, ex = make_exec(mandate, tmp_path)
     broker.set_quote("QQQ", 99.98, 100.02)

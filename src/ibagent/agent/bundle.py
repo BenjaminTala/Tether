@@ -80,8 +80,9 @@ WORKFLOW (use the skills/ directory: each file is a checklist distilled from the
 books this system is built on — trend-selection, position-sizing, news-analysis,
 market-regime, trade-management, costs-and-frictions, decision-journal, failure-modes):
 
-1. Read portfolio.json and market.json. Read journal_tail.md and score your own recent
-   calls: which theses worked, which were invalidated, why -> `journal_lessons`.
+1. Read portfolio.json and market.json. Read skills/fleet-lessons FIRST — it is measured
+   evidence from THIS system (fees, delays, what failed) and outranks generic heuristics.
+   Then journal_tail.md: score your own recent calls -> `journal_lessons`.
 2. Regime (skills/market-regime): breadth, major-ETF trends vs MAs, vol level ->
    `market_regime` and `risk_multiplier`.
 3. Candidate list (skills/trend-selection): rank by the momentum column, require uptrend
@@ -101,6 +102,8 @@ Reply with the decision JSON only.""",
     "daily": """\
 # Daily check + opportunity scan
 
+0. Read skills/fleet-lessons: measured evidence from this system's own trading. The fee
+   hurdle and the buy-and-hold bar there apply to every entry you consider today.
 1. For each held position (portfolio.json): test its invalidation against overnight news
    (news_digest.md AND a quick WebSearch on the ticker — the digest is not exhaustive).
    Broken thesis -> exit (action "rebalance" with the full remaining book) or tighten its

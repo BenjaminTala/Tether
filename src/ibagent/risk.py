@@ -75,12 +75,20 @@ def _mark(q: Quote) -> Optional[float]:
     return float(m) if m and m > 0 else None
 
 
-def _limit_price(q: Quote, side: Side, offset_bps: int) -> Optional[float]:
-    """Marketable limit: BUY <= ask*(1+off), SELL >= bid*(1-off). Falls back to last +/- off."""
+def _limit_price(q: Quote, side: Side, offset_bps: float, atr: Optional[float] = None) -> Optional[float]:
+    """Marketable limit: BUY <= ask*(1+off), SELL >= bid*(1-off). Falls back to last +/- off.
+
+    With delayed quotes a fixed offset loses races on volatile names (LLY expired unfilled
+    3 days straight): when ATR is known, widen the offset by 10% of daily ATR, capped at
+    +25bps — still far under the slippage-alert threshold."""
     off = offset_bps / 10_000.0
     if side == "BUY":
         ref = q.ask if (q.ask and q.ask > 0) else q.last
-        return round(ref * (1 + off), 2) if ref and ref > 0 else None
+        if not ref or ref <= 0:
+            return None
+        if atr and atr > 0:
+            off += min(25 / 10_000.0, 0.1 * atr / ref)
+        return round(ref * (1 + off), 2)
     ref = q.bid if (q.bid and q.bid > 0) else q.last
     return round(ref * (1 - off), 2) if ref and ref > 0 else None
 
@@ -351,7 +359,7 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
             plan.rejections.append(Rejection(p.symbol, what,
                                              f"fee {100 * fee / notional:.2f}% exceeds cap"))
             continue
-        lp = _limit_price(quotes[p.symbol], "BUY", offset)
+        lp = _limit_price(quotes[p.symbol], "BUY", offset, atr=atrs.get(p.symbol))
         if lp is None:
             plan.rejections.append(Rejection(p.symbol, what, "no usable quote"))
             continue

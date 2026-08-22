@@ -78,7 +78,7 @@ class Executor:
         for po in plan.orders:                                   # exits first (plan is sorted)
             if po.req.side == "SELL":
                 self._release_stop(po.req.symbol)                # un-reserve shares held by the GTC stop
-            outcome, fills = self._place_and_wait(po.req)
+            outcome, fills = self._place_and_wait(po.req, retry_buy=(po.req.side == "BUY"))
             report.outcomes.append(outcome)
             for f in fills:
                 realized = self._apply_fill(f, po)
@@ -234,7 +234,8 @@ class Executor:
             return None
         return round(ref * (1 + off) if side == "BUY" else ref * (1 - off), 2)
 
-    def _place_and_wait(self, req: OrderRequest) -> Tuple[OrderOutcome, List[Fill]]:
+    def _place_and_wait(self, req: OrderRequest,
+                        retry_buy: bool = False) -> Tuple[OrderOutcome, List[Fill]]:
         req = req if req.contract else OrderRequest(**{**req.__dict__, "contract": self._contract(req.symbol)})
         outcome = OrderOutcome(client_tag=req.client_tag, symbol=req.symbol, side=req.side,
                                requested_qty=req.qty)
@@ -263,8 +264,23 @@ class Executor:
                 self.broker.cancel(status.broker_order_id)
             except Exception:
                 pass
-            outcome.state, outcome.reason = "unfilled", f"no fill in {FILL_WAIT_S}s; cancelled"
             self.journal.record("order_unfilled", {"tag": req.client_tag})
+            # One retry at a FRESH quote: with delayed data the market often just ran past
+            # our limit (LLY expired unfilled 3 days straight before this existed).
+            if retry_buy and req.side == "BUY" and not req.client_tag.endswith("-R"):
+                try:
+                    q = self.broker.quote(req.contract)
+                    new_lp = self._limit(q, "BUY")
+                except Exception:
+                    new_lp = None
+                if new_lp and req.limit_price and new_lp > req.limit_price:
+                    retry_req = OrderRequest(**{**req.__dict__, "limit_price": new_lp,
+                                                "client_tag": req.client_tag + "-R"})
+                    self.journal.record("order_retry", {"tag": retry_req.client_tag,
+                                                        "old_limit": req.limit_price,
+                                                        "new_limit": new_lp})
+                    return self._place_and_wait(retry_req, retry_buy=False)
+            outcome.state, outcome.reason = "unfilled", f"no fill in {FILL_WAIT_S}s; cancelled"
             return outcome, []
         outcome.filled_qty = round(sum(f.qty for f in fills), 8)
         outcome.avg_price = round(sum(f.qty * f.price for f in fills) / outcome.filled_qty, 4)

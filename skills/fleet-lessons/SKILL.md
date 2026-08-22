@@ -1,0 +1,45 @@
+---
+name: fleet-lessons
+description: Distilled, EVIDENCE-BASED lessons from this system's own backtests and live trading. Unlike the book-derived skills, every line here was measured on this machine with this broker, these fees and this data. Read before proposing any trade; when a book heuristic and a fleet lesson conflict, the fleet lesson wins because it priced in OUR frictions.
+---
+
+# Fleet Lessons (evidence from this system's own history)
+
+## From the 3-year backtest on real data (2023-08 → 2026-08, real fees/slippage)
+
+| strategy          | CAGR  | maxDD | Sharpe | fees  |
+|-------------------|-------|-------|--------|-------|
+| SPY buy-and-hold  | 10.9% | 17.9% | 0.88   | $1    |
+| core 60/40        |  7.3% | 12.3% | 0.89   | $2    |
+| momentum top-3    |  8.6% | 16.2% | 0.57   | $176  |
+| swing tight-stops |  4.7% | 23.1% | 0.33   | $364  |
+
+1. **Buy-and-hold is the bar.** The mechanical momentum skeleton UNDERPERFORMED holding
+   SPY over this window. Your only justification for an active position is judgment the
+   skeleton lacks: a concrete catalyst, a fundamental read, a regime call. If your thesis
+   is only "momentum rank is high", the backtest says that alone is worth LESS than nothing.
+2. **The fee hurdle is real and computable.** Every round-trip costs ~$2 (fixed pricing).
+   On a $500 position that is 0.4% guaranteed loss before edge. Do not propose a trade
+   whose realistic edge is under ~3x its round-trip cost. More trades = more certain drag;
+   the swing backtest paid 3.6% of the whole pot to fees.
+3. **Tight stops + fast rotation was the worst of both worlds** — lowest return AND
+   deepest drawdown (whipsaw harvesting). In choppy-but-rising tape, wider stops with
+   smaller size beat tight stops with bigger size at equal risk.
+4. **V-shaped dips are trend-following's enemy**: stops eject you, re-entry lags the
+   rebound. When regime is risk_on and a held name dips WITHOUT thesis damage, the
+   backtest-informed move is patience, not a tighter leash.
+
+## From live trading (paper, this fleet)
+
+5. **Delayed quotes lose races on high-priced, wide-ATR names.** LLY expired unfilled on
+   3 consecutive days. Prefer lower-priced, tighter-spread expressions of the same thesis
+   (sector ETF vs the $1,200 stock) when both are on the whitelist.
+6. **Stops at the broker work.** BAC's trailed GTC stop exited automatically at −0.24% of
+   the pot while nobody watched. Trust the machinery: set the stop honestly at entry
+   instead of proposing a tight stop you secretly expect to widen (you can't).
+7. **Chasing stale catalysts fails.** The one live spec loss so far (HD, −$29 x2 agents)
+   came from buying a day-old headline in a downtrending name. A catalyst is tradable the
+   day it breaks, in the direction of the prevailing trend — or not at all.
+8. **Sitting out is a respected position.** Days of headlines produced zero qualifying
+   spec catalysts and the correct book was no spec at all. Every "no_change on a quiet
+   day" journal entry aged well so far; every forced trade did not.

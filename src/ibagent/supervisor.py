@@ -59,6 +59,8 @@ class ScheduleState:
     last_intraday_ts: float = 0.0
     telegram_offset: int = 0
     last_fleet_digest: str = ""          # ISO Monday of the last FLEET.md digest (main only)
+    bench_date: str = ""                 # SPY referee anchor (main only)
+    bench_close: float = 0.0
     last_fill_sync: str = ""             # ISO datetime
     watchlist: List[str] = field(default_factory=list)
     event_gate: dict = field(default_factory=dict)
@@ -701,6 +703,21 @@ class Supervisor:
         ]
         if realized_today:
             lines.append(f"Locked in today (closed trades): {realized_today:+,.2f} $")
+        # The referee: what the same money in plain SPY would be worth (backtest lesson:
+        # buy-and-hold is the bar every active decision must clear).
+        if self.variant_name == "main":
+            spy_q = self._quotes({"SPY"}).get("SPY")
+            spy = (spy_q.mid or spy_q.last) if spy_q else None
+            if spy:
+                if not self.state.bench_close:
+                    self.state.bench_date = now.astimezone(self.tz).date().isoformat()
+                    self.state.bench_close = float(spy)
+                    self.state.save(self.data_dir / "schedule_state.json")
+                    lines.append("Referee: SPY benchmark anchored today.")
+                else:
+                    bench = self.book.net_contributions * spy / self.state.bench_close
+                    lines.append(f"vs just SPY:   {snap.equity - bench:+,.2f} $ "
+                                 f"(SPY'd be ${bench:,.2f} since {self.state.bench_date})")
 
         # ---- per-stock rundown: how each holding moved TODAY ------------------------------
         if self.book.positions:
