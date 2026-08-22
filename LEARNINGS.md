@@ -1,5 +1,28 @@
 # Live-session learnings
 
+## 2026-08-22 — the backtest speaks: simple beat clever (2023-08 → 2026-08, real IBKR data)
+
+| strategy          | CAGR  | maxDD | Sharpe | trades | fees    |
+|-------------------|-------|-------|--------|--------|---------|
+| SPY buy-and-hold  | 10.9% | 17.9% | 0.88   | 1      | $1      |
+| core 60/40        |  7.3% | 12.3% | 0.89   | 2      | $2      |
+| momentum top-3    |  8.6% | 16.2% | 0.57   | 176    | $176    |
+| swing tight-stops |  4.7% | 23.1% | 0.33   | 364    | $364    |
+
+- **Buy-and-hold beat every mechanical active variant** over this (bull-heavy, V-recovery)
+  window. Trend-following's known weakness: stops eject you in dips, re-entry lags the
+  rebound. One window ≠ verdict, but the bar is set: the momentum skeleton alone earns
+  LESS than doing nothing, with more trades and more stress.
+- **Fees compound brutally at Fixed pricing**: $176 (1.8% of the pot) for monthly momentum,
+  $364 (3.6%) for weekly swing — before any adverse selection. The Tiered switch is worth
+  ~2.3 percentage points of CAGR to the fast variants. (Live scalper trades ~daily: worse.)
+- **Tight stops + fast rotation was the WORST of both worlds**: highest drawdown AND lowest
+  return — whipsaw harvesting. Prediction sharpened: swing and scalper shadows will lag.
+- **This defines the AI's job precisely**: the mechanical skeleton does not beat the market,
+  so any edge must come from the judgment layer (news, fundamentals, regime timing) that
+  backtests cannot measure — exactly what the 6-agent forward test exists to falsify.
+- All numbers are optimistic upper bounds (survivorship-biased universe, close fills).
+
 ## 2026-08-21 — day 5: "why is everyone losing?" has a quantitative answer, and it found a bug
 
 - **Attribution before blame.** VTI −0.91% since the fleet's entries; SMH −5.7% on the
