@@ -109,6 +109,7 @@ class Supervisor:
         self.executor = Executor(mandate, broker, self.book, self.journal, self.alerter,
                                  sleeper=sleeper, now_fn=now_fn)
         self.runner: LLMRunner = runner or ClaudeCodeRunner(mandate.llm, decision_json_schema_text())
+        self.qa_runner: Optional[LLMRunner] = None       # tests inject; production builds schema-less
         self.state = ScheduleState.load(self.data_dir / "schedule_state.json")
         self.news = NewsStore(self.data_dir / "news_state.json")
         self.feeds = list(feeds) if feeds is not None else DEFAULT_FEEDS
@@ -688,17 +689,21 @@ class Supervisor:
         held = set(self.book.positions)
         quotes = self._quotes(held) if held else {}
         prices = {s: (q.mid or q.last) for s, q in quotes.items() if (q.mid or q.last)}
+        from ibagent.agent.bundle import degraded_portfolio_json, portfolio_json
         try:
             snap = self.book.equity(prices, now)
-            from ibagent.agent.bundle import portfolio_json
-            (bundle_dir / "portfolio.json").write_text(
-                json.dumps(portfolio_json(self.book, snap, self.m), indent=1), encoding="utf-8")
-        except Exception:
-            (bundle_dir / "portfolio.json").write_text("{}", encoding="utf-8")
+            portfolio = portfolio_json(self.book, snap, self.m)
+        except Exception as exc:
+            # Broker down / no quotes: the book is still the truth. Never hand the model "{}"
+            # (2026-08-24 outage: it told the owner "no positions loaded").
+            portfolio = degraded_portfolio_json(self.book, str(exc))
+        (bundle_dir / "portfolio.json").write_text(json.dumps(portfolio, indent=1), encoding="utf-8")
         (bundle_dir / "question.md").write_text(question, encoding="utf-8")
-        runner = ClaudeCodeRunner(self.m.llm, schema_text=None)
+        runner = self.qa_runner or ClaudeCodeRunner(self.m.llm, schema_text=None)
         prompt = ("You are the assistant for the owner of this small trading system. "
                   "question.md is the owner's question; portfolio.json is the current book. "
+                  "If portfolio.json has a 'status' field, the broker link is down: say so in "
+                  "your first line and treat its positions as real. "
                   "Use WebSearch/WebFetch if the question needs current information. "
                   "FORMAT FOR A PHONE SCREEN, this is a Telegram chat: lead with the direct "
                   "answer in one short sentence; then short bullet lines starting with '• '; "

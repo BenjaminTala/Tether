@@ -1,5 +1,26 @@
 # Live-session learnings
 
+## 2026-08-24 (night) — the assistant lied during the outage, politely
+
+- **Fail-closed data must not become "nothing there".** At 17:48 UTC, Gateway still down,
+  Benjamin asked the Telegram assistant to "fix it". The Q&A bundle could not mark the
+  book (no quotes → `book.equity` raises, correctly), so the fallback wrote
+  `portfolio.json = {}` — and the model answered "portfolio.json is empty, no positions
+  loaded" while VTI + SGOV sat in the book with stops resting at the broker. Fail-closed
+  on ORDERS is right; fail-EMPTY on INFORMATION is a lie. Fixed: an unmarkable book now
+  ships a `status: DEGRADED …` portfolio with the engine's positions, and the prompt tells
+  the model to lead with "broker link is down". Regression test pins it.
+- **Hysteresis held on its first real outage**: Monday's 9h Gateway outage (13:17→22:24
+  UTC) produced ONE `connect` error line per variant (vs 211 over the weekend) and the
+  reconnect summary; the SMH stop fill was synced retroactively on recovery. The
+  weekend's 211 lines in today's counts are all pre-fix.
+- **twin has still never decided**: seeded Sat 08-22, its first weekly was Monday 09:45
+  ET — eaten by the outage. Its weekly + daily are unmarked, so they fire Tue morning
+  under the roll-forward rule; the fee A/B starts a day late. Nothing to fix.
+- **The 04:45 UTC blip is nightly**: `Socket disconnect` + "missing quotes for held
+  symbols" at 04:46–04:48 UTC on 08-20, 21, 23, 24 — IB's server-side reset window.
+  Self-heals within one tick; not the 9:15 ET login loss. Leave it.
+
 ## 2026-08-24 — the lost Monday, replayed: what the outage actually cost
 
 Gateway's daily restart at ~9:15 ET logged out with nobody home; the whole session ran

@@ -190,6 +190,15 @@ def mandate_excerpt(m: Mandate, equity: float = 0.0) -> str:
     return "\n".join(lines)
 
 
+def positions_json(book: Book) -> list:
+    return [
+        {"symbol": p.symbol, "sleeve": p.sleeve, "qty": p.qty, "avg_cost": p.avg_cost,
+         "entry_date": p.entry_date, "entry_price": p.entry_price, "stop": p.stop_price,
+         "target": p.target_price, "thesis": p.thesis, "invalidation": p.invalidation,
+         "time_stop": p.time_stop_date, "partial_taken": p.partial_taken}
+        for p in sorted(book.positions.values(), key=lambda x: x.symbol)]
+
+
 def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate) -> dict:
     return {
         "equity": snap.equity,
@@ -203,12 +212,25 @@ def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate) -> dict:
                      "paused_sleeves": book.paused_sleeves,
                      "consecutive_spec_losers": book.consecutive_spec_losers},
         "cooldowns": book.cooldowns,
-        "positions": [
-            {"symbol": p.symbol, "sleeve": p.sleeve, "qty": p.qty, "avg_cost": p.avg_cost,
-             "entry_date": p.entry_date, "entry_price": p.entry_price, "stop": p.stop_price,
-             "target": p.target_price, "thesis": p.thesis, "invalidation": p.invalidation,
-             "time_stop": p.time_stop_date, "partial_taken": p.partial_taken}
-            for p in sorted(book.positions.values(), key=lambda x: x.symbol)],
+        "positions": positions_json(book),
+    }
+
+
+def degraded_portfolio_json(book: Book, reason: str) -> dict:
+    """Portfolio view when the book cannot be marked (broker down, no live prices). The
+    engine's own positions are still authoritative and must never be presented as 'empty'
+    — on 2026-08-24 an empty fallback made the Q&A assistant tell the owner nothing was
+    held while VTI+SGOV sat in the book."""
+    return {
+        "status": ("DEGRADED: live prices unavailable (" + reason[:200] + "). Equity and "
+                   "sleeve values cannot be computed right now; the positions below come from "
+                   "the engine's own book and ARE the real holdings. Protective stops rest at "
+                   "the broker regardless."),
+        "pot_cash": book.pot_cash,
+        "realized_pnl": book.realized_pnl,
+        "breakers": {"halted": book.halted, "frozen": book.frozen,
+                     "paused_sleeves": book.paused_sleeves},
+        "positions": positions_json(book),
     }
 
 

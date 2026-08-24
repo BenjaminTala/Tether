@@ -280,3 +280,21 @@ def test_bars_warning_once_per_symbol_per_day(env):
     sup._bars(["QQQ"], clock())
     assert len([w for w in _journal_kinds(tmp, "warning", "bars")
                 if w["payload"]["symbol"] == "QQQ"]) == 2
+
+
+def test_qa_during_outage_still_shows_the_book(env):
+    """2026-08-24: with the Gateway down, the owner's question got portfolio.json = {} and
+    the assistant replied 'no positions loaded' while VTI+SGOV sat in the book. A book that
+    cannot be marked is still the truth — the Q&A bundle must say DEGRADED, not empty."""
+    m, broker, sup, clock, tmp = env
+    enter(sup, broker, "VTI", "core", 3.0, 380.0)
+    sup._quotes = lambda symbols: {}                       # broker down: no prices at all
+    sup.qa_runner = FakeRunner([RunResult(ok=False, decision=None, text="answer")])
+    sup._qa_job("what do I hold?", clock())
+    req = sup.qa_runner.requests[0]
+    pf = __import__("json").loads((req.bundle_dir / "portfolio.json").read_text(encoding="utf-8"))
+    assert pf["status"].startswith("DEGRADED")
+    assert [p["symbol"] for p in pf["positions"]] == ["VTI"]
+    assert pf["positions"][0]["qty"] == 3.0
+    assert "'status'" in req.prompt
+    assert _journal_kinds(tmp, "qa")[-1]["payload"]["ok"] is True

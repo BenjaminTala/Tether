@@ -37,6 +37,9 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
 6. **Stops at the broker work.** BAC's trailed GTC stop exited automatically at −0.24% of
    the pot while nobody watched. Trust the machinery: set the stop honestly at entry
    instead of proposing a tight stop you secretly expect to widen (you can't).
+   Second proof (2026-08-24): SMH's GTC stop fired at 547.52 while our Gateway was
+   OFFLINE for 9 hours; SMH closed below it. The broker-side stop is the only defence
+   that works when we are not there — never rely on "I'll manage it intraday".
 7. **Chasing stale catalysts fails.** The one live spec loss so far (HD, −$29 x2 agents)
    came from buying a day-old headline in a downtrending name. A catalyst is tradable the
    day it breaks, in the direction of the prevailing trend — or not at all.
