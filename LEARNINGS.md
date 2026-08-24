@@ -1,5 +1,26 @@
 # Live-session learnings
 
+## 2026-08-24 — the lost Monday, replayed: what the outage actually cost
+
+Gateway's daily restart at ~9:15 ET logged out with nobody home; the whole session ran
+without decisions. Counterfactual from today's hourly tape + Friday's journaled intentions:
+
+- **Missed trades ≈ $0 to −$10.** The documented queue was LLY 1sh + MRK 4sh re-entries at
+  ~9:50. LLY entered ~1,252 → closed 1,247.77 (−$5±); MRK entered ~150.6 → closed 150.70
+  (≈ flat); +$2 fees. The day was drifting red (SPY −0.17%, QQQ −0.47%, NVDA −3.26%):
+  nothing worth having was on sale.
+- **The stop that fired was RIGHT.** SMH stopped out at 547.52 at 9:38 — by IBKR's servers,
+  fully offline on our side — and SMH closed BELOW that (546.66, daylow 540.75). The
+  protective exit beat holding. Server-side stops earned their existence in production.
+- **scalper would likely have scored zero anyway**: its continuation trigger (≥1.5% from
+  open, top third of range) was never met by any watchlist name (best: JPM +1.41% max).
+- **Held-position P&L accrued regardless** — marks don't need our Gateway. The outage's real
+  cost was not missed profit but UNPROTECTED DECISION TIME: if a crash had come, only the
+  GTC stops stood guard (they did, correctly). Conclusion: morning-login fragility is a risk
+  problem, not a returns problem — and it still must die (Auto restart / IBC).
+- Recovery-path bug fixed the same evening: an overdue weekly now rolls to the next trading
+  MORNING instead of firing into a closed market and burning the week's slot.
+
 ## 2026-08-23 — weekend outage post-mortem: the system healed itself, but shouted the whole time
 
 - **IB Gateway was down Sat 20:01 UTC → Sun 23:29 UTC (~27.5h) and recovered by itself**
