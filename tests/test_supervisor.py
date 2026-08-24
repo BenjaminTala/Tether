@@ -98,17 +98,32 @@ def test_total_drawdown_halt_liquidates_active(env):
 
 def test_daily_report_and_schedule_marks(env):
     m, broker, sup, clock, tmp = env
+    clock.now = datetime(2026, 8, 12, 19, 0, tzinfo=timezone.utc)       # 15:00 ET, inside RTH
+    sup.tick(clock.now)
+    assert sup.state.last_daily == "2026-08-12"            # daily agent job fired (HOLD fallback)
+    assert sup.state.last_report == ""                     # report waits for 16:20
     clock.now = datetime(2026, 8, 12, 20, 30, tzinfo=timezone.utc)      # 16:30 ET, after close
     sup.tick(clock.now)
     assert sup.state.last_report == "2026-08-12"
-    assert sup.state.last_daily == "2026-08-12"            # daily agent job also fired (HOLD fallback)
-    kinds = [e["kind"] for e in sup.journal.tail(50)]
+    kinds = [e["kind"] for e in sup.journal.tail(80)]
     assert "daily_report" in kinds
     # second tick the same day does not repeat the jobs
-    n = len(sup.journal.tail(200))
     sup.tick(clock.now + timedelta(minutes=5))
     kinds2 = [e["kind"] for e in sup.journal.tail(200)]
     assert kinds2.count("daily_report") == 1
+
+
+def test_missed_decision_runs_do_not_fire_after_hours(env):
+    """2026-08-24: Gateway was down all session; login came after the close. The overdue
+    weekly must NOT burn itself into a closed market — it rolls to the next RTH morning."""
+    m, broker, sup, clock, tmp = env
+    clock.now = datetime(2026, 8, 12, 22, 30, tzinfo=timezone.utc)      # 18:30 ET Monday-ish
+    sup.tick(clock.now)
+    assert sup.state.last_weekly == "" and sup.state.last_daily == ""   # nothing consumed
+    clock.now = datetime(2026, 8, 13, 14, 30, tzinfo=timezone.utc)      # next day 10:30 ET, RTH
+    sup.tick(clock.now)
+    assert sup.state.last_weekly == "2026-08-10"                        # made up next morning
+    assert sup.state.last_daily == "2026-08-13"
 
 
 def test_weekend_runs_nothing(env):

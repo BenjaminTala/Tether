@@ -433,14 +433,18 @@ class Supervisor:
                 "A good day-trading day is 1-3 trades; zero on a dead tape is fine — but if "
                 "you end every day at zero, say in `notes_for_human` what stopped you."))
 
-        weekday = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")[local.weekday()]
-        if is_trading_day(today) and weekday == c.weekly_review.day \
-                and hhmm >= c.weekly_review.time and self.state.last_weekly != _monday(today):
+        # Decision runs fire ONLY while orders can fill. A late recovery (Gateway down all
+        # morning, logged in after the close - 2026-08-24) must NOT burn the run after
+        # hours: leaving last_weekly unmarked rolls it to the next trading morning instead.
+        can_trade_now = is_rth(now) and hhmm <= "15:30"
+        weekly_due = (is_trading_day(today) and self.state.last_weekly != _monday(today)
+                      and (local.weekday() > 0 or hhmm >= c.weekly_review.time))
+        if can_trade_now and weekly_due:
             self.state.last_weekly = _monday(today)
             self.state.save(self.data_dir / "schedule_state.json")
             self._agent_job("weekly", now)
 
-        if is_trading_day(today) and hhmm >= c.daily_check.time \
+        if can_trade_now and is_trading_day(today) and hhmm >= c.daily_check.time \
                 and self.state.last_daily != today.isoformat():
             self.state.last_daily = today.isoformat()
             self.state.save(self.data_dir / "schedule_state.json")
