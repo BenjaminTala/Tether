@@ -1,5 +1,34 @@
 # Live-session learnings
 
+## 2026-08-23 — weekend outage post-mortem: the system healed itself, but shouted the whole time
+
+- **IB Gateway was down Sat 20:01 UTC → Sun 23:29 UTC (~27.5h) and recovered by itself**
+  before Monday's open — no action was needed, the machinery did its job. But each of the
+  7 supervisors journaled an identical connect error every ~5 minutes (~211 lines each,
+  ~1,500 fleet-wide), and main pinged Telegram "broker connection down" every 30 minutes
+  all weekend — the exact alert-fatigue failure the day-2 watchdog fix identified, living
+  on in the supervisor's own connect path. Fixed with the same hysteresis pattern: one
+  error + one alert when an outage starts, at most one reminder/hour, one summary
+  (duration + attempt count) on recovery. Regression tests pin both paths.
+- **Friday 16:00–20:00 UTC: historical bars failed for ALL 14 universe symbols on every
+  scan cycle, on all 7 variants, while quotes kept working.** Started at the 15:59 UTC
+  fleet restart (breaker-fix deploy). Working hypothesis: 7 clients re-requesting daily
+  history simultaneously trips IB's historical-data pacing/farm limits after a mass
+  restart. Fail-closed held (no orders came from empty stats), but ~800 duplicate
+  warnings/variant were pure noise — bars warnings are now once per symbol per day with
+  a `bars_recovered` marker bracketing the window. WATCH: whether bars fail again after
+  the next fleet restart; if so, stagger the shadows' startup.
+- **OneDrive PermissionError hit a third time** (swing, Fri 09:30 UTC tick). Day-4 rule
+  said "three times is a migration": moving `data/` + `data-shadows/` out of the OneDrive
+  sync tree (or excluding them) is now due. Owner decision — flagged in tonight's report,
+  not done autonomously.
+- **scalper is still a day trader that has never day-traded**: 6 more intraday runs on
+  Friday, zero orders, zero realized round-trips since inception — yet second-best equity
+  (−$27 vs turtle's −$26). Restraint keeps outscoring activity, which is exactly what the
+  backtest predicted.
+- All three Friday false sleeve-pauses (main, sniper, swing) are confirmed lifted; books
+  show no paused sleeves. First FLEET.md weekly digest fires Mon 08-24 after the close.
+
 ## 2026-08-22 — the backtest speaks: simple beat clever (2023-08 → 2026-08, real IBKR data)
 
 | strategy          | CAGR  | maxDD | Sharpe | trades | fees    |

@@ -176,3 +176,92 @@ def test_watchdog(env, tmp_path):
     assert watchdog_check(m, now=NOW, **args2) == 1
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args2) == 1
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info", "critical"]
+
+
+class _CountingAlerter(Alerter):
+    def __init__(self):
+        super().__init__([])
+        self.sent = []
+
+    def send(self, level, title, body="", dedupe=True):
+        self.sent.append((level, title))
+        return True
+
+
+def _journal_kinds(tmp, kind, where=None):
+    out = []
+    for f in sorted((tmp / "journal").glob("*.jsonl")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            j = __import__("json").loads(line)
+            if j["kind"] == kind and (where is None or j["payload"].get("where") == where):
+                out.append(j)
+    return out
+
+
+def test_connection_outage_hysteresis(env):
+    """A weekend-long Gateway outage journals ONE error and alerts once at the start,
+    at most hourly after, and summarizes on recovery (2026-08-22/23: 211 identical
+    errors + a Telegram ping every 30 min per variant)."""
+    m, broker, sup, clock, tmp = env
+    a = _CountingAlerter()
+    sup.alerter = a
+    broker.is_connected = lambda: False
+    def refuse():
+        raise ConnectionError("refused")
+    broker.connect = refuse
+
+    sup._ensure_connected()                                # outage starts: one error, one alert
+    for i in range(1, 8):                                  # 35 min of 5-min retries: silence
+        clock.now = NOW + timedelta(minutes=5 * i)
+        assert sup._ensure_connected() is False
+    assert len(_journal_kinds(tmp, "error", "connect")) == 1
+    assert [lvl for lvl, _ in a.sent] == ["warning"]
+
+    clock.now = NOW + timedelta(minutes=65)                # an hour in: one reminder
+    sup._ensure_connected()
+    assert [lvl for lvl, _ in a.sent] == ["warning", "warning"]
+    assert a.sent[1][1] == "broker still unreachable"
+    assert len(_journal_kinds(tmp, "error", "connect")) == 1
+
+    def reconnect():                                       # recovery: one summary each way
+        broker.is_connected = lambda: True
+    broker.connect = reconnect
+    clock.now = NOW + timedelta(minutes=70)
+    assert sup._ensure_connected() is True
+    recons = [j for j in _journal_kinds(tmp, "broker") if j["payload"].get("event") == "reconnected"]
+    assert recons[-1]["payload"]["down_minutes"] == 70
+    assert recons[-1]["payload"]["failed_attempts"] == 9
+    assert [lvl for lvl, _ in a.sent] == ["warning", "warning", "info"]
+
+    assert sup._ensure_connected() is True                 # healthy again: silence
+    assert len(a.sent) == 3
+    assert sup._conn_down_since is None and sup._conn_fail_count == 0
+
+
+def test_bars_warning_once_per_symbol_per_day(env):
+    """Repeated historical-data failures warn once per symbol per day, and recovery is
+    journaled to bracket the window (2026-08-21: ~800 identical bars warnings/variant)."""
+    m, broker, sup, clock, tmp = env
+
+    def no_bars(contract, days):
+        raise RuntimeError(f"no historical bars for {contract.symbol}")
+    broker.daily_bars = no_bars
+    for _ in range(5):
+        sup._bars(["SPY", "QQQ"], clock())
+    warns = _journal_kinds(tmp, "warning", "bars")
+    assert sorted(w["payload"]["symbol"] for w in warns) == ["QQQ", "SPY"]
+
+    from ibagent.broker.base import Bar
+    broker.daily_bars = lambda contract, days: [Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    sup._bars(["SPY"], clock())
+    rec = [j for j in _journal_kinds(tmp, "broker") if j["payload"].get("event") == "bars_recovered"]
+    assert [j["payload"]["symbol"] for j in rec] == ["SPY"]
+    sup._bars(["SPY"], clock())                            # no duplicate recovery record
+    assert len([j for j in _journal_kinds(tmp, "broker")
+                if j["payload"].get("event") == "bars_recovered"]) == 1
+
+    clock.now = NOW + timedelta(days=1)                    # new day: the warning may repeat
+    broker.daily_bars = no_bars
+    sup._bars(["QQQ"], clock())
+    assert len([w for w in _journal_kinds(tmp, "warning", "bars")
+                if w["payload"]["symbol"] == "QQQ"]) == 2

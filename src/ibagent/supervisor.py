@@ -119,6 +119,10 @@ class Supervisor:
         self._scored_recent: list = []
         self._bars_cache: Dict[str, List[Bar]] = {}
         self._bars_cache_day: str = ""
+        self._bars_warned: Set[str] = set()
+        self._conn_down_since: Optional[datetime] = None
+        self._conn_fail_count: int = 0
+        self._conn_last_remind: Optional[datetime] = None
         self.sync_capital()
 
     def sync_capital(self) -> None:
@@ -245,16 +249,44 @@ class Supervisor:
         return engaged
 
     def _ensure_connected(self) -> bool:
+        # Outage hysteresis: one error + one alert when the connection drops, at most one
+        # reminder per hour while it stays down, one summary on recovery. A weekend Gateway
+        # outage must not produce hundreds of identical journal lines and Telegram pings.
         try:
             if self.broker.is_connected():
+                self._connection_restored(reconnect=False)
                 return True
             self.broker.connect()
-            self.journal.record("broker", {"event": "reconnected"})
+            self._connection_restored(reconnect=True)
             return True
         except Exception as exc:
-            self.journal.record("error", {"where": "connect", "err": str(exc)})
-            self.alerter.warning("broker connection down", str(exc)[:300])
+            now = utc(self.now_fn())
+            self._conn_fail_count += 1
+            if self._conn_down_since is None:
+                self._conn_down_since = self._conn_last_remind = now
+                self.journal.record("error", {"where": "connect", "err": str(exc)})
+                self.alerter.warning("broker connection down",
+                                     f"{str(exc)[:300]}\nI'll remind you hourly until it's back.")
+            elif self._conn_last_remind is None or now - self._conn_last_remind >= timedelta(hours=1):
+                self._conn_last_remind = now
+                mins = int((now - self._conn_down_since).total_seconds() // 60)
+                self.alerter.warning("broker still unreachable",
+                                     f"down {mins} min, {self._conn_fail_count} attempts; "
+                                     f"latest: {str(exc)[:200]}")
             return False
+
+    def _connection_restored(self, reconnect: bool) -> None:
+        if self._conn_down_since is not None:
+            now = utc(self.now_fn())
+            mins = int((now - self._conn_down_since).total_seconds() // 60)
+            self.journal.record("broker", {"event": "reconnected", "down_minutes": mins,
+                                           "failed_attempts": self._conn_fail_count})
+            self.alerter.info("broker connection restored",
+                              f"outage lasted {mins} min ({self._conn_fail_count} failed attempts)")
+            self._conn_down_since = self._conn_last_remind = None
+            self._conn_fail_count = 0
+        elif reconnect:
+            self.journal.record("broker", {"event": "reconnected"})
 
     def _sync_external_fills(self, now: datetime) -> None:
         since_txt = self.state.last_fill_sync
@@ -282,14 +314,21 @@ class Supervisor:
         day = now.date().isoformat()
         if self._bars_cache_day != day:
             self._bars_cache, self._bars_cache_day = {}, day
+            self._bars_warned.clear()
         out: Dict[str, List[Bar]] = {}
         for sym in symbols:
             if sym not in self._bars_cache:
                 try:
                     self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
                 except Exception as exc:
-                    self.journal.record("warning", {"where": "bars", "symbol": sym, "err": str(exc)})
+                    # Warn once per symbol per day; recovery below brackets the window.
+                    if sym not in self._bars_warned:
+                        self._bars_warned.add(sym)
+                        self.journal.record("warning", {"where": "bars", "symbol": sym, "err": str(exc)})
                     continue
+                if sym in self._bars_warned:
+                    self._bars_warned.discard(sym)
+                    self.journal.record("broker", {"event": "bars_recovered", "symbol": sym})
             out[sym] = self._bars_cache[sym]
         return out
 
