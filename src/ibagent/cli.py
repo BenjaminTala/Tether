@@ -198,6 +198,64 @@ def _build_shadow_supervisor(m: Mandate, name: str):
     return Supervisor(m, ShadowBroker(data, sim), data_dir=data_dir, variant_name=name)
 
 
+def cmd_engineer(args: argparse.Namespace) -> int:
+    """Nightly self-improvement pass: a headless Claude run under ENGINEER.md's charter,
+    fenced by deterministic guards (tests must pass, protected files must be untouched)."""
+    import subprocess
+    from ibagent.journal import Journal
+    from ibagent.llm.runner import resolve_claude_bin
+    m = _load(args)
+    repo = Path.cwd()
+    journal = Journal(m.journal.dir)
+
+    def git(*a: str) -> str:
+        r = subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True)
+        return (r.stdout or "").strip()
+
+    pre_head = git("rev-parse", "HEAD")
+    flags = 0x08000000 if sys.platform == "win32" else 0          # CREATE_NO_WINDOW
+    cmd = [resolve_claude_bin(m.llm.claude_bin), "-p", "--output-format", "text",
+           "--permission-mode", "dontAsk", "--max-turns", "80",
+           "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash"]
+    prompt = ("Read ENGINEER.md in this directory and carry out tonight's engineering pass. "
+              "Follow its charter exactly - especially the MUST NOT list and the report.")
+    try:
+        proc = subprocess.run(cmd, cwd=repo, input=prompt, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=2700,
+                              creationflags=flags)
+        raw = (proc.stdout or "") + "\n--- stderr ---\n" + (proc.stderr or "")
+    except subprocess.TimeoutExpired:
+        raw = "(engineer run timed out after 45 min)"
+    journal.save_blob(f"engineer-{__import__('datetime').datetime.now():%Y%m%d}.txt", raw[-40000:])
+
+    git("checkout", "--", ".")                                     # drop uncommitted leftovers
+    post_head = git("rev-parse", "HEAD")
+    verdict = "no changes"
+    if post_head != pre_head:
+        changed = git("diff", "--name-only", f"{pre_head}..{post_head}").splitlines()
+        forbidden = [f for f in changed if f == "mandate.yaml" or f.startswith("data")]
+        tests = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q"], cwd=repo,
+                               capture_output=True, text=True, timeout=600)
+        if forbidden or tests.returncode != 0:
+            git("reset", "--hard", pre_head)
+            verdict = (f"REVERTED {len(changed)} file(s): "
+                       + ("touched protected files " + ",".join(forbidden) if forbidden
+                          else "test suite went red"))
+        else:
+            subprocess.run(["git", "push", "origin", "main"], cwd=repo, capture_output=True,
+                           timeout=120)
+            verdict = f"kept + pushed: {len(changed)} file(s) ({', '.join(changed[:6])})"
+    journal.record("engineer", {"pre": pre_head[:9], "post": git("rev-parse", "HEAD")[:9],
+                                "verdict": verdict})
+    report_file = repo / "data" / "engineer_report.txt"
+    report = report_file.read_text(encoding="utf-8")[:3200] if report_file.exists() \
+        else "(engineer left no report)"
+    from ibagent.alerts import build_alerter
+    build_alerter(m.alerts).info("🔧 Nightly engineer", f"{verdict}\n\n{report}", dedupe=False)
+    print(verdict)
+    return 0
+
+
 def cmd_backtest(args: argparse.Namespace) -> int:
     """Backtest the deterministic strategy skeletons on real IBKR daily history."""
     from ibagent.backtest import (load_history, make_momentum, run_backtest, save_history,
@@ -381,6 +439,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp("watchdog", help="heartbeat watchdog, run by Task Scheduler")
     sp("status", help="print the engine book (no broker connection)")
     sp("compare", help="fleet scoreboard: main vs shadow variants")
+    sp("engineer", help="nightly self-improvement pass (headless Claude under ENGINEER.md)")
     bt = sp("backtest", help="backtest the deterministic strategy skeletons on IBKR history")
     bt.add_argument("--years", type=float, default=3.0)
     bt.add_argument("--refresh", action="store_true", help="refetch cached history")
@@ -416,6 +475,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_compare(args)
         if args.cmd == "backtest":
             return cmd_backtest(args)
+        if args.cmd == "engineer":
+            return cmd_engineer(args)
     except (MandateError, LedgerError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
