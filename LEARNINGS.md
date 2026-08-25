@@ -1,5 +1,35 @@
 # Live-session learnings
 
+## 2026-08-25 (night, engineer) — a request with no timeout is a request that can last forever
+
+- **The 85-min wedge had a one-line root cause**: ib_async's `IB.RequestTimeout` defaults
+  to 0 = wait forever. At IB's 17:00 ET server reset the socket went half-dead and every
+  tick on all 7 variants sat inside `reqTickers`/`reqExecutions` until the manual restart.
+  Fixed: `broker.request_timeout_s` (30s default) caps every request; a timeout DROPS the
+  connection so the supervisor's reconnect hysteresis (one alert per outage) takes over,
+  instead of each subsequent call timing out in turn. Deployed 22:45 UTC via the restart
+  dance; all 7 heartbeats fresh within 60s. Tomorrow's 17:00 ET reset is the real test.
+- **The same tape hid a second, daily loss**: at 09:36 ET all 7 variants ran 48 consecutive
+  history requests that each hit ib_async's 60s internal timeout and returned []. Every
+  tick was blocked ~48 min; the "09:45 ET" weekly decisions actually ran 10:22–10:32 ET
+  and those symbols never recovered all day. Bars have failed on 7 of the last 8 trading
+  days (main: 344/71/284/584/206/1/48 warning lines) — the Friday "pacing" hypothesis
+  was too narrow; it happens at every open. Fixed the COST (bars timeout 20s + skip the
+  rest of the pass after 3 consecutive failures, retry next tick); the CAUSE is still
+  open. WATCH tomorrow: does `history unavailable; rest of pass skipped` fire at the
+  open, and do `bars_recovered` markers follow? If it never recovers intraday, the 48
+  scan-surface symbols may need to be dropped or fetched once pre-open.
+- **Watchdog verification is impossible after the fact**: it alerts to Telegram but
+  journals nothing, and its state file resets to `{}` on recovery. Whether Benjamin got
+  the 🚨 for 21:08–22:35 can only be answered by his phone. Small follow-up: journal
+  watchdog transitions.
+- **OneDrive PermissionError: 4 more today** (main 20:07, sniper 14:32, swing 14:35, twin
+  03:13 UTC) — that is 8+ total; the day-4 "three times is a migration" threshold is long
+  past. Still an owner decision (see report).
+- First fee-A/B fills: twin deployed core (VTI $3k + SGOV $2k) at 14:59 UTC — the A/B clock
+  starts today. sniper and swing both bought XLF (17 sh @ 58.15, stop trailing 56.39→56.70
+  through the session). Too fresh to judge; nothing distilled into fleet-lessons tonight.
+
 ## 2026-08-24 (night) — the assistant lied during the outage, politely
 
 - **Fail-closed data must not become "nothing there".** At 17:48 UTC, Gateway still down,
@@ -262,7 +292,7 @@ each entry actionable or explicitly closed.
 - **$1.00/side commission confirmed on fills** (Fixed plan): 2% round-trip at $100. Tiered
   switch remains the single highest-value config change available. *Open: Benjamin.*
 
-## 2026-08-25 (evening) — URGENT for tonight engineer: tick wedged 85 min at the 17:00 ET reset
+## 2026-08-25 (evening) — URGENT for tonight engineer: tick wedged 85 min at the 17:00 ET reset — DONE same night, see top entry
 - All 7 supervisors heartbeats went stale 21:08-21:14 UTC (IBKR daily server-reset window);
   ticks blocked inside broker calls (quote/fills_since warnings streaming at 22:33 from a
   tick started 21:08). Manual kill+restart fixed it 22:35 UTC. ROOT CAUSE TO FIX: broker
