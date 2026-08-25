@@ -261,3 +261,13 @@ each entry actionable or explicitly closed.
   The discipline framing in the skills appears to transfer.
 - **$1.00/side commission confirmed on fills** (Fixed plan): 2% round-trip at $100. Tiered
   switch remains the single highest-value config change available. *Open: Benjamin.*
+
+## 2026-08-25 (evening) — URGENT for tonight engineer: tick wedged 85 min at the 17:00 ET reset
+- All 7 supervisors heartbeats went stale 21:08-21:14 UTC (IBKR daily server-reset window);
+  ticks blocked inside broker calls (quote/fills_since warnings streaming at 22:33 from a
+  tick started 21:08). Manual kill+restart fixed it 22:35 UTC. ROOT CAUSE TO FIX: broker
+  calls inside tick have no hard timeout on a half-dead socket - add a per-call timeout
+  (ib_async reqTimeout / asyncio wait_for) so a dead connection fails a call in seconds,
+  not hours, and the tick moves on. Also verify the watchdog alerted (stale >10 min - did
+  Benjamin get the Telegram?). NOTE: 14 pythonw processes is NORMAL (venv launcher = 2 per
+  task); do not chase that.
