@@ -298,3 +298,39 @@ def test_qa_during_outage_still_shows_the_book(env):
     assert pf["positions"][0]["qty"] == 3.0
     assert "'status'" in req.prompt
     assert _journal_kinds(tmp, "qa")[-1]["payload"]["ok"] is True
+
+
+def test_bars_circuit_breaker_skips_rest_of_pass(env):
+    """2026-08-25: at the open, 48 consecutive history requests each hit ib_async's 60s
+    timeout on all 7 variants — every tick was blocked for 48 minutes and the 09:45 ET
+    weekly ran at 10:22. After BARS_FAIL_STREAK consecutive failures in one pass the
+    remaining symbols are skipped (one warning per day), and a later pass retries them."""
+    from ibagent.broker.base import Bar
+    from ibagent.supervisor import BARS_FAIL_STREAK
+    m, broker, sup, clock, tmp = env
+    calls = []
+
+    def no_bars(contract, days):
+        calls.append(contract.symbol)
+        raise RuntimeError(f"no historical bars for {contract.symbol}")
+    broker.daily_bars = no_bars
+    syms = [f"S{i}" for i in range(20)]
+    sup._bars(syms, clock())
+    assert len(calls) == BARS_FAIL_STREAK
+    skipped = [w for w in _journal_kinds(tmp, "warning", "bars") if "skipped" in w["payload"]]
+    assert len(skipped) == 1 and skipped[0]["payload"]["skipped"] == 20 - BARS_FAIL_STREAK
+    sup._bars(syms, clock())                               # still down: no second circuit warning
+    assert len([w for w in _journal_kinds(tmp, "warning", "bars") if "skipped" in w["payload"]]) == 1
+
+    calls.clear()
+    broker.daily_bars = lambda contract, days: [Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    out = sup._bars(syms, clock())                         # farm back: every symbol fetched
+    assert sorted(out) == sorted(syms)
+
+    calls.clear()
+    broker.daily_bars = no_bars
+    clock.now = NOW + timedelta(days=1)                    # new day, fresh cache: two good, then dead
+    good = {"S0", "S1"}
+    broker.daily_bars = lambda c, d: [Bar(NOW, 1.0, 1.0, 1.0, 1.0, 1.0)] if c.symbol in good else no_bars(c, d)
+    out = sup._bars(syms, clock())
+    assert set(out) == good and len(calls) == BARS_FAIL_STREAK

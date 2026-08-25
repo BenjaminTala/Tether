@@ -76,6 +76,10 @@ class BrokerCfg(Strict):
     market_data_type: Literal[1, 2, 3, 4] = 3
     fractional_shares: bool = True
     connect_timeout_s: int = Field(ge=5, le=120, default=20)
+    # 2026-08-25: a half-dead socket at IB's 17:00 ET reset wedged every tick for 85 min because
+    # ib_async requests have NO timeout by default. Any request slower than this fails the call.
+    request_timeout_s: int = Field(ge=5, le=120, default=30)
+    bars_timeout_s: int = Field(ge=5, le=120, default=20)
 
 
 # ----------------------------------------------------------------------------- universe

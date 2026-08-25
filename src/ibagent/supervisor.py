@@ -43,6 +43,7 @@ from ibagent.sleeves import core_rebalance, evaluate_breakers, protective_action
 
 DATA_DIR = Path("data")
 BARS_FOR_STATS = 300
+BARS_FAIL_STREAK = 3          # consecutive bar failures in one pass before skipping the rest
 PROTECTIVE_MIN_SPACING_S = 900
 STATUS_UPDATE_SPACING_S = 3600          # intraday Telegram status every hour during RTH
 
@@ -317,16 +318,28 @@ class Supervisor:
             self._bars_cache, self._bars_cache_day = {}, day
             self._bars_warned.clear()
         out: Dict[str, List[Bar]] = {}
-        for sym in symbols:
+        streak = 0
+        for i, sym in enumerate(symbols):
             if sym not in self._bars_cache:
+                if streak >= BARS_FAIL_STREAK:
+                    # Circuit breaker: the history farm is down for everyone, not this symbol.
+                    # 2026-08-25: 48 symbols x 60s timeouts blocked every tick for 48 min.
+                    skipped = [s for s in symbols[i:] if s not in self._bars_cache]
+                    if "*" not in self._bars_warned:
+                        self._bars_warned.add("*")
+                        self.journal.record("warning", {"where": "bars", "msg": "history unavailable; rest of "
+                                                        "pass skipped", "skipped": len(skipped)})
+                    break
                 try:
                     self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
                 except Exception as exc:
+                    streak += 1
                     # Warn once per symbol per day; recovery below brackets the window.
                     if sym not in self._bars_warned:
                         self._bars_warned.add(sym)
                         self.journal.record("warning", {"where": "bars", "symbol": sym, "err": str(exc)})
                     continue
+                streak = 0
                 if sym in self._bars_warned:
                     self._bars_warned.discard(sym)
                     self.journal.record("broker", {"event": "bars_recovered", "symbol": sym})

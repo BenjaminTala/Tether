@@ -183,6 +183,25 @@ class IBKRBroker:
         self.ack_wait_s = ack_wait_s
         self.quote_timeout_s = quote_timeout_s
         self._contracts: Dict[str, "IBContract"] = {}
+        # Hard ceiling on every blocking request (connect included, so it must not undercut
+        # connect_timeout_s). 2026-08-25: with the ib_async default of 0 (= wait forever) a
+        # half-dead socket at IB's 17:00 ET reset held a tick hostage for 85 minutes.
+        self.ib.RequestTimeout = float(max(cfg.request_timeout_s, cfg.connect_timeout_s + 5))
+
+    def _timed(self, what: str, fn, *args, **kwargs):
+        """Run one broker request; on timeout, drop the connection so the supervisor's
+        reconnect path (with its outage hysteresis) takes over instead of every later call
+        timing out too. A dead link must fail in seconds, not hours."""
+        try:
+            return fn(*args, **kwargs)
+        except TimeoutError as exc:              # asyncio.TimeoutError is TimeoutError on 3.11+
+            log.warning("IB request %s timed out after %.0fs; dropping connection", what, self.ib.RequestTimeout)
+            try:
+                self.ib.disconnect()
+            except Exception:                    # pragma: no cover - best effort on a dead socket
+                pass
+            raise BrokerError(f"{what}: IB request timed out after {self.ib.RequestTimeout:.0f}s "
+                              f"(connection dropped, will reconnect)") from exc
 
     # ---- connection ----
     def connect(self, attempts: int = 3) -> None:
@@ -235,7 +254,7 @@ class IBKRBroker:
         return sorted(out, key=lambda x: x.symbol)
 
     def open_orders(self) -> List[OrderStatus]:
-        trades = self.ib.reqAllOpenOrders()
+        trades = self._timed("open_orders", self.ib.reqAllOpenOrders)
         return [s for s in (trade_to_status(t) for t in trades) if s.state in _ACTIVE]
 
     def place(self, req: OrderRequest) -> OrderStatus:
@@ -258,7 +277,7 @@ class IBKRBroker:
     def fills_since(self, ts: datetime) -> List[Fill]:
         ts = utc(ts)
         seen: Dict[str, Fill] = {}
-        for f in list(self.ib.fills()) + list(self.ib.reqExecutions()):
+        for f in list(self.ib.fills()) + list(self._timed("fills_since", self.ib.reqExecutions)):
             if f.execution.execId in seen:
                 continue
             if utc(f.time) >= ts:
@@ -269,7 +288,7 @@ class IBKRBroker:
     def quote(self, contract: Contract) -> Quote:
         c = self._qualify(contract)
         delayed = self.cfg.market_data_type != 1
-        tickers = self.ib.reqTickers(c)
+        tickers = self._timed(f"quote {contract.symbol}", self.ib.reqTickers, c)
         t = tickers[0] if tickers else None
         bid, ask, last = (_clean(t.bid), _clean(t.ask), _clean(t.last)) if t else (None, None, None)
         if bid is None and ask is None and last is None:
@@ -283,8 +302,11 @@ class IBKRBroker:
 
     def daily_bars(self, contract: Contract, days: int) -> List[Bar]:
         c = self._qualify(contract)
+        # ib_async returns [] when its own timeout lapses (default 60s): 2026-08-25 all 7
+        # variants sat through 48 x 60s of that at the open. Fail faster; the caller warns.
         bars = self.ib.reqHistoricalData(c, endDateTime="", durationStr=duration_str(days), barSizeSetting="1 day",
-                                         whatToShow="TRADES", useRTH=True, formatDate=1)
+                                         whatToShow="TRADES", useRTH=True, formatDate=1,
+                                         timeout=float(self.cfg.bars_timeout_s))
         out = [bar_from_ib(b) for b in bars]
         if not out:
             raise BrokerError(f"no historical bars for {contract.symbol}")
@@ -296,7 +318,7 @@ class IBKRBroker:
         if key in self._contracts:
             return self._contracts[key]
         stock = to_ib_stock(contract)
-        details = self.ib.reqContractDetails(stock)
+        details = self._timed(f"qualify {contract.symbol}", self.ib.reqContractDetails, stock)
         if not details:
             raise BrokerError(f"unknown contract {contract}")
         if len(details) > 1:
