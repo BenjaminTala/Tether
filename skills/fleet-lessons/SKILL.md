@@ -46,3 +46,16 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
 8. **Sitting out is a respected position.** Days of headlines produced zero qualifying
    spec catalysts and the correct book was no spec at all. Every "no_change on a quiet
    day" journal entry aged well so far; every forced trade did not.
+9. **Previews are not events.** Earnings-preview pieces ("faces a critical test on
+   Wednesday"), launch-date announcements and other calendar headlines fired the event
+   trigger at high materiality (NVDA 0.8, AAPL 0.65 on 2026-08-26; HD ×4, WMT before)
+   and not one of them broke or built a thesis. If the headline describes something
+   that WILL happen, the tradable information does not exist yet: `no_change`, and say
+   in one line that it was a preview. Never position into a binary print on a preview.
+10. **If market.json is missing rows for held positions, the tape is broken, not quiet.**
+   Say so in one sentence, `no_change`, and stop — do not re-diagnose the pipeline in
+   every run (scalper wrote the same lesson 13 times on 2026-08-26). The engine's stops
+   protect the book; your job on a broken tape is to not trade blind.
+11. **Second-try fills work on liquid ETFs.** XLF expired unfilled once and filled on the
+   next day's re-attempt at ask+35bps for two variants; LLY never did. Lesson 5 holds:
+   express a thesis through the instrument that fills.

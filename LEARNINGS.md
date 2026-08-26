@@ -1,5 +1,49 @@
 # Live-session learnings
 
+## 2026-08-26 (night, engineer) — the timeout fix held; the circuit breaker was hiding the book
+
+- **17:00 ET reset survived, fleet-wide.** Six variants sailed through 21:00 UTC without a
+  single line; twin took one `IB request timed out after 30s (connection dropped)` at 21:08
+  and was reconnected by 21:13 — 5 minutes of hysteresis-quiet outage vs 85 wedged minutes
+  the day before. All 7 heartbeats fresh at 22:41 UTC. Yesterday's fix is proven.
+- **Gateway itself was down 22:55→02:59 UTC (4h04, 46 attempts), right after the deploy** —
+  `WinError 1225 connection refused`, i.e. the Gateway process was gone, not our socket.
+  One error line + one reconnect summary per variant: hysteresis did its job. Cause unknown
+  (IB nightly restart window or the Gateway's own auto-restart); nothing traded, nothing lost.
+- **scalper has been BLIND all session — 13 model runs on 3 of 48 symbols.** Every bundle
+  today held only AAPL/AMD/AVGO, none of its five held positions, and `close` never moved
+  (AAPL 309.9 in all 13). Root cause was ours: the bars circuit breaker (added last night)
+  `break`-ed out of the pass, so symbols sorting AFTER the first three failures were dropped
+  from the result even when they were already cached (the protective pass had fetched
+  QQQ/SPY/XLF fine at 13:32). The model's 13 identical lessons ("data problem, not
+  indecision") were correct and useless. Fixed: cached symbols are always served; the
+  intraday refetch loop (which silently burned ~15 × 20s per event run — bundle stamped
+  13:32, model started 13:41) is now bounded by the same streak rule. Regression tests pin
+  both. NOTE the design rule: a circuit breaker must degrade to "what we already know",
+  never to "nothing".
+- **Why scalper's history requests fail all day while the other six are fine is STILL
+  open.** ABBV/ADBE/AMZN/META returned empty at exactly the 20s timeout, every tick, from
+  13:36 to the close; no other variant lost a symbol after 13:55. Scalper is the only client
+  requesting 48 symbols + a ~15-symbol refetch every 30 min — IB historical pacing
+  (60 requests/10 min, per user) is the leading hypothesis, and it is self-inflicted. The
+  bounded refetch cuts the request rate ~5×; if `no historical bars` still fires on the scan
+  surface tomorrow, the next step is fetching the scan surface once pre-open, not per tick.
+- **`day_change` / `day_open` have been null in EVERY bundle of EVERY variant since day 1.**
+  The daily-bar cache is keyed on the UTC date, so it is filled at ~20:00 ET with bars that
+  end yesterday and served all session; only the event-run refetch could ever populate the
+  intraday fields, and scalper's never succeeded. Whether IB even returns today's partial
+  daily bar on this delayed-data plan is untested — check tomorrow with a one-off fetch
+  during RTH before building on it. Until then the "day-trader playbook" is running on
+  yesterday's closes by construction.
+- **Two variants (scalper, turtle) reported "skills/ contains only README.md and REFRAME.md"**
+  — the bundle had all 13 skill folders; the model did a shallow listing. Prompt now says
+  where the checklists live (`skills/<name>/SKILL.md`). Cheap, harmless.
+- **Sniper burned 2 event runs on non-events** (NVDA earnings-preview headline at 0.8
+  materiality; AAPL launch-date). Its own lesson: "calendar headlines never broke a held
+  thesis". Distilled into fleet-lessons; the scorer is untouched (two data points).
+- OneDrive PermissionError: sniper 19:28 + scalper 19:38 UTC → 10+ total. Owner decision
+  still pending.
+
 ## 2026-08-25 (night, engineer) — a request with no timeout is a request that can last forever
 
 - **The 85-min wedge had a one-line root cause**: ib_async's `IB.RequestTimeout` defaults
