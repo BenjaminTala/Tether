@@ -280,7 +280,9 @@ def build_bundle(m: Mandate, book: Book, snap: EquitySnapshot, stats: Dict[str, 
     prompt = (f"{task}\n\nContext files in this directory: mandate_excerpt.md, portfolio.json, "
               f"market.json, news_digest.md, journal_tail.md, decision_schema.json"
               + (", EVENT.md" if event_note else "")
-              + (", skills/ (trading skills to apply)" if skills_dir and skills_dir.is_dir() else "")
+              + (", skills/ (trading skills to apply — one folder per skill, the checklist is "
+                 "skills/<name>/SKILL.md; README.md at the top is only the index)"
+                 if skills_dir and skills_dir.is_dir() else "")
               + ". Read what you need, then reply with the decision JSON only.")
     return Bundle(dir=bundle_dir, prompt=prompt, system_prompt_file=bundle_dir / "SYSTEM.md")
 
