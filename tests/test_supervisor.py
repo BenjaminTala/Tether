@@ -334,3 +334,58 @@ def test_bars_circuit_breaker_skips_rest_of_pass(env):
     broker.daily_bars = lambda c, d: [Bar(NOW, 1.0, 1.0, 1.0, 1.0, 1.0)] if c.symbol in good else no_bars(c, d)
     out = sup._bars(syms, clock())
     assert set(out) == good and len(calls) == BARS_FAIL_STREAK
+
+
+def test_bars_circuit_breaker_still_serves_cached_symbols(env):
+    """2026-08-26: scalper's held QQQ/SPY/XLF were fetched for the protective pass and sat
+    in the day cache, yet all 13 bundles showed only AAPL/AMD/AVGO — the breaker `break`-ed
+    out of the loop before reaching cached symbols that sort after the failing ones. Cached
+    history must be served regardless of where the farm died in the pass."""
+    from ibagent.broker.base import Bar
+    from ibagent.supervisor import BARS_FAIL_STREAK
+    m, broker, sup, clock, tmp = env
+    ok = lambda contract, days: [Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    broker.daily_bars = ok
+    sup._bars(["QQQ", "SPY", "XLF"], clock())             # protective pass: held symbols cached
+    calls = []
+
+    def dead(contract, days):
+        calls.append(contract.symbol)
+        raise RuntimeError(f"no historical bars for {contract.symbol}")
+    broker.daily_bars = dead
+    scan = ["AAPL", "ABBV", "ADBE", "AMZN", "META", "QQQ", "SPY", "XLF"]
+    out = sup._bars(scan, clock())                          # farm dead for the scan surface
+    assert len(calls) == BARS_FAIL_STREAK
+    assert sorted(out) == ["QQQ", "SPY", "XLF"]             # held book still visible
+    skipped = [w for w in _journal_kinds(tmp, "warning", "bars") if "skipped" in w["payload"]]
+    assert skipped[0]["payload"]["skipped"] == 2            # only the UNCACHED remainder counts
+
+
+def test_refresh_bars_is_bounded_and_skips_known_failures(env):
+    """2026-08-26: the intraday focus refetch retried every failing symbol at 20s each,
+    silently — ~9 min between bundle stamp and model start, 13 times. It must stop after
+    BARS_FAIL_STREAK failures and not retry symbols that already failed today."""
+    from datetime import date
+    from ibagent.broker.base import Bar
+    from ibagent.supervisor import BARS_FAIL_STREAK
+    m, broker, sup, clock, tmp = env
+    calls = []
+
+    def dead(contract, days):
+        calls.append(contract.symbol)
+        raise RuntimeError("no historical bars")
+    broker.daily_bars = dead
+    sup._bars(["ABBV"], clock())                            # ABBV failed + warned today
+    calls.clear()
+    fresh = sup._refresh_bars(["ABBV", "S1", "S2", "S3", "S4", "S5"], date(2026, 8, 12))
+    assert fresh == {} and "ABBV" not in calls and len(calls) == BARS_FAIL_STREAK
+
+    calls.clear()
+
+    def alive(contract, days):
+        calls.append(contract.symbol)
+        return [Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    broker.daily_bars = alive
+    fresh = sup._refresh_bars(["SPY", "QQQ"], date(2026, 8, 12))
+    assert sorted(fresh) == ["QQQ", "SPY"] and sorted(calls) == ["QQQ", "SPY"]
+    assert sup._bars_cache["SPY"]                            # refreshed bars land in the cache

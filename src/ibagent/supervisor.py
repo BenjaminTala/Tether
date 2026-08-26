@@ -319,17 +319,25 @@ class Supervisor:
             self._bars_warned.clear()
         out: Dict[str, List[Bar]] = {}
         streak = 0
+        tripped = False
         for i, sym in enumerate(symbols):
             if sym not in self._bars_cache:
+                if tripped:
+                    continue
                 if streak >= BARS_FAIL_STREAK:
                     # Circuit breaker: the history farm is down for everyone, not this symbol.
                     # 2026-08-25: 48 symbols x 60s timeouts blocked every tick for 48 min.
+                    # Only UNCACHED symbols are skipped — cached ones further down the list
+                    # must still be served (2026-08-26: scalper's held QQQ/SPY/XLF were in the
+                    # cache all day yet every bundle showed 3 of 48 symbols, because the
+                    # breaker used to `break` out before reaching them).
+                    tripped = True
                     skipped = [s for s in symbols[i:] if s not in self._bars_cache]
                     if "*" not in self._bars_warned:
                         self._bars_warned.add("*")
                         self.journal.record("warning", {"where": "bars", "msg": "history unavailable; rest of "
                                                         "pass skipped", "skipped": len(skipped)})
-                    break
+                    continue
                 try:
                     self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
                 except Exception as exc:
@@ -345,6 +353,27 @@ class Supervisor:
                     self.journal.record("broker", {"event": "bars_recovered", "symbol": sym})
             out[sym] = self._bars_cache[sym]
         return out
+
+    def _refresh_bars(self, symbols: Sequence[str], today_local) -> Dict[str, SymbolStats]:
+        """Intraday re-fetch of a focus set so a day-trader run sees today's partial bar.
+        Bounded like `_bars`: symbols that already failed today are not retried here (the
+        next `_bars` pass probes recovery), and BARS_FAIL_STREAK consecutive failures end
+        the refresh. 2026-08-26: scalper's unbounded loop burned ~15 x 20s per event run
+        (bundle stamped 13:32, model started 13:41) and never got a single fresh bar."""
+        fresh: Dict[str, SymbolStats] = {}
+        streak = 0
+        for sym in sorted(symbols):
+            if sym in self._bars_warned or streak >= BARS_FAIL_STREAK:
+                continue
+            try:
+                self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
+            except Exception:
+                streak += 1
+                continue
+            streak = 0
+            fresh.update(stats_table({sym: self._bars_cache[sym]},
+                                     self.m.risk.stops.atr_period, today=today_local))
+        return fresh
 
     def _reconcile(self) -> None:
         try:
@@ -559,14 +588,7 @@ class Supervisor:
                             key=lambda s: -abs(s.day_change))[:10]
             focus = set(self.book.positions) | set(self.state.watchlist) \
                 | {s.symbol for s in movers} | set(momentum_rank(stats)[:8])
-            for sym in sorted(focus):
-                try:
-                    self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
-                    fresh = stats_table({sym: self._bars_cache[sym]},
-                                        self.m.risk.stops.atr_period, today=today_local)
-                    stats.update(fresh)
-                except Exception:
-                    continue
+            stats.update(self._refresh_bars(focus, today_local))
         atrs = {s: v.atr for s, v in stats.items() if v.atr}
         held = set(self.book.positions)
         digest = build_digest(self._scored_recent, held, set(self.state.watchlist))
