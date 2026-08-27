@@ -59,3 +59,11 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
 11. **Second-try fills work on liquid ETFs.** XLF expired unfilled once and filled on the
    next day's re-attempt at ask+35bps for two variants; LLY never did. Lesson 5 holds:
    express a thesis through the instrument that fills.
+12. **A hard print is tradable in the first in-RTH run, or not at all.** NVDA's beat-and-
+   raise (2026-08-27): main, turtle and swing proposed it (twin: SMH) in the 09:50 daily
+   and the three filled at ~223 — inside the chase gate because the gap open
+   was still ~1.5 ATR over ma20. Every later look (scalper's 13 intraday scans) found the
+   move at +7% → +10% (CRM +20%) and correctly passed. Bold, which had sized half into the
+   print, held and refused to add at the cap — also correct. So: on the morning after a
+   real print, decide in the daily run with the gap price; do not plan to "wait for a
+   pullback and re-run" — on this tape the pullback never came inside the window.

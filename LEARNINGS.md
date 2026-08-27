@@ -1,5 +1,55 @@
 # Live-session learnings
 
+## 2026-08-27 (night, engineer) — NVDA day: the fleet finally bought a catalyst, and the event gate slept through it
+
+- **First catalyst trades of the forward test.** NVDA beat-and-raise (after the 08-26 close)
+  → in the 09:50 daily: main 4 sh @ 223.51 + JPM 1 sh, turtle 3 sh @ 222.22, swing 2 sh
+  @ 222.22 (spec) — all inside the chase gate at the gap open; all closed the day +1.7–2.1%
+  from fill. bold (half-sized into the print on 08-25) held and refused to add at the cap.
+  twin proposed SMH and was rejected (see turnover below). Discipline held everywhere: no
+  variant chased CRM (+20%) or NVDA after the first run. Distilled as fleet lesson 12.
+- **BUG (fixed): the event gate burned the whole daily budget before the open.** main 3/3,
+  swing 3/3, sniper 4/4 triggers consumed at 06:17–06:45 ET on pre-market NVDA headlines;
+  `_news_job` then declined to run outside RTH — but `check_event_gate` had already counted
+  the trigger and armed the cooldown. Result: zero event runs for those three on the most
+  material day so far (sniper, the "news specialist", never woke up). Fix: the gate takes
+  `can_fire=is_rth(now)` and returns without mutating state outside RTH. Regression test.
+  NOTE this is a sibling of the 08-18 bug family ("decide only when the market can act"):
+  budgets, like decisions, must only be spent inside the window where they can be used.
+- **Core deployment eats the model's weekly turnover budget (twin blocked).** twin's core
+  buys on 08-25 (VTI+SGOV, $4,555 = 45.5% of equity) count toward `week_turnover_usd`; the
+  50% cap then rejected its first trend entry (SMH ~$650) on 08-27 with "weekly turnover
+  cap reached". main only escaped this in its own first week because its trend entries
+  (08-17) preceded core (08-18). Every fresh account will hit it: core is code-driven and
+  passes no turnover check itself, yet it charges the model's churn allowance. NOT changed
+  tonight — excluding core fills from the turnover counter is a risk-semantics change on
+  MAIN's mandate and the charter says write it down. Proposed one-liner:
+  `book.apply_fill`: `if sleeve != "core": self.week_turnover_usd += notional`. Owner call.
+  twin's budget resets Monday 08-31; the fee A/B loses one week of trend exposure.
+- **scalper: 14 model runs, 13 identical no_change, one 900-s timeout** (15:08–15:23 UTC,
+  the run was re-issued and answered in 48 s). Every note names the same blocker: intraday
+  fields null. Its 30-min scan is pure cost until `day_change` populates; it found the
+  right answer (do not chase a +10%/+20% gap) 13 times over. Not touching its cadence yet —
+  the fix belongs in the data path, not in scanning less.
+- **`day_change` is still null everywhere — and I could not run the RTH probe.** Tonight's
+  one-off `reqHistoricalData(NVDA, 5 D, 1 day)` at 22:45 UTC from a fresh client (one
+  request, so NOT pacing) timed out at 20 s, exactly the "no historical bars" the fleet saw
+  for AMZN/ADBE (13:46–13:58 UTC, all 7 variants within 12 min), V (20:24–20:31, all 7) and
+  COST (22:18–22:21, 4 of 7). Same symbol, same minute, every client → the history farm is
+  flaky IB-side, per symbol, not per client. The scan-surface/pacing hypothesis from 08-26
+  is weakened. TOMORROW during RTH, one probe decides the day_change design: does a 1-day
+  bar request return today's partial bar on delayed data (market_data_type 3)? If yes, the
+  refetch already does the right thing and the nulls are the farm; if no, the intraday
+  fields need `reqHistoricalData(… '1 D', '1 hour')` or a quote-based day_change instead.
+- The 20:05 ET cache fill fails its first 3 symbols and skips 5–11 on every variant every
+  night (00:04–00:06 UTC), then recovers at 04:53 UTC after IB's reset. Harmless (bars
+  are served from the previous day's cache meanwhile) but it is the same farm flakiness.
+- OneDrive PermissionError: bold 17:38, scalper 16:12, turtle 15:35 UTC → 13+ total.
+- Fleet after 8 trading days (equity): twin +19.77, swing +11.48, scalper +8.60, turtle
+  +8.39, bold +6.02, sniper −39.41, main −58.49 (main carries the SMH stop-out −50.21 and
+  a $1/side fee bill; twin, same brain on tiered, is +$78 ahead — but also one week
+  behind on trend exposure, so the A/B is not yet clean).
+
 ## 2026-08-26 (night, engineer) — the timeout fix held; the circuit breaker was hiding the book
 
 - **17:00 ET reset survived, fleet-wide.** Six variants sailed through 21:00 UTC without a
