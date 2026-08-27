@@ -136,13 +136,21 @@ class EventTrigger:
 
 def check_event_gate(cfg: EventCfg, state: EventGateState, scored: Sequence[ScoredItem],
                      held: Set[str], watched: Set[str], day_moves: Dict[str, float],
-                     now: datetime) -> Optional[EventTrigger]:
+                     now: datetime, can_fire: bool = True) -> Optional[EventTrigger]:
     """Fire at most one event run: material news on a held/watched symbol AND a real price move,
-    within the daily budget and cooldown. Mutates `state` when it fires."""
+    within the daily budget and cooldown. Mutates `state` when it fires.
+
+    `can_fire=False` (caller cannot run the model right now, e.g. outside RTH) returns None
+    WITHOUT touching the budget or cooldown. 2026-08-27: NVDA's after-hours print + pre-market
+    headlines tripped the gate at 06:17-06:45 ET on main/swing/sniper; the supervisor refused
+    to run outside RTH but the counter had already reached max_per_day, so the biggest
+    catalyst day of the fleet's life produced zero event runs during the session."""
     now = now.astimezone(timezone.utc)
     today = now.date().isoformat()
     if state.day != today:
         state.day, state.count_today = today, 0
+    if not can_fire:
+        return None
     if cfg.max_per_day <= 0 or state.count_today >= cfg.max_per_day:
         return None
     if now.timestamp() - state.last_trigger_ts < cfg.cooldown_minutes * 60:

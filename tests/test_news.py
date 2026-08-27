@@ -89,6 +89,20 @@ def test_event_gate_fires_and_respects_budget():
     assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, tomorrow)
 
 
+def test_event_gate_outside_rth_spends_nothing():
+    """2026-08-27: pre-market NVDA headlines consumed the whole daily event budget on
+    main/swing/sniper before the open; the session then had no event run left."""
+    scored = score_items(items(), ["AAPL"])
+    st = EventGateState()
+    for _ in range(5):        # pre-market polls: material news + a big move, but no run possible
+        assert check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW,
+                                can_fire=False) is None
+    assert st.count_today == 0 and st.last_trigger_ts == 0.0
+    # first in-RTH poll fires with the full budget intact
+    t = check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW)
+    assert t is not None and st.count_today == 1
+
+
 def test_event_gate_requires_move_and_holding():
     scored = score_items(items(), ["AAPL"])
     st = EventGateState()

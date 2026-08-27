@@ -523,8 +523,10 @@ class Supervisor:
         if need_quotes:
             quotes = {**quotes, **self._quotes(need_quotes)}
         moves = self._day_moves(held | watched, quotes, now)
+        # Outside RTH the gate must not consume budget/cooldown: the run below cannot fire,
+        # and pre-market headlines would otherwise spend the day's events before the open.
         trigger = check_event_gate(self.m.cadence.event, gate, self._scored_recent,
-                                   held, watched, moves, now)
+                                   held, watched, moves, now, can_fire=is_rth(now))
         self.state.event_gate = gate.as_dict()
         self.state.save(self.data_dir / "schedule_state.json")
         if trigger and is_rth(now):
