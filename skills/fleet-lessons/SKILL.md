@@ -67,3 +67,14 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    print, held and refused to add at the cap — also correct. So: on the morning after a
    real print, decide in the daily run with the gap price; do not plan to "wait for a
    pullback and re-run" — on this tape the pullback never came inside the window.
+13. **A repeat headline is not a new event.** On 2026-08-28 one CRM follow-through piece
+   fired 24 event runs fleet-wide (3–4 per variant); every run re-derived the same
+   4.9-ATR extension and said no. The gate now fires each headline once per day, but the
+   rule stands for you too: if the trigger note quotes a story you already reviewed today,
+   re-check the arithmetic in one line and `no_change` — do not re-read the narrative.
+14. **Breakeven on day 2 after a print is a stop-out, not protection.** bold moved its
+   NVDA stop to breakeven (217.30, at ma20) the morning after entry at +~1R; NVDA gave
+   back 4.5% that afternoon and the stop filled at 217.25 for −$2. main, turtle and swing
+   kept their original stops (~214.6–214.8, 207) and are still in. One instance, but it
+   is lesson 3/4 again from the other side: a fresh post-print position needs room for the
+   day-2 shakeout; move to breakeven when +1R has HELD for a session, not when it first prints.

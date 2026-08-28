@@ -1,5 +1,46 @@
 # Live-session learnings
 
+## 2026-08-28 (night, engineer) — one headline, 24 runs; the machine froze itself for its own stop
+
+- **BUG (fixed): the event gate re-fired the same headline after every cooldown.** CNBC's
+  "Benioff getting his mojo back" CRM piece (materiality 0.8, CRM +2–3.6% intraday) triggered
+  main ×2, bold ×3, scalper ×4, sniper ×4, swing ×3, turtle ×3, twin ×2 between 13:34 and
+  17:04 UTC — 21 symbol-triggered runs plus GOOGL's $10M-airline-data "0.95" on main/twin.
+  All 24 were `no_change` on the same 4.9-ATR arithmetic; three variants wrote "consider
+  deduplicating event triggers per headline" as their lesson. Root cause: the digest keeps
+  items 36h, the gate only checked budget + cooldown. Fix: `EventGateState.fired_keys`
+  (link, reset daily, persisted) — a headline fires once per day; a new headline on the
+  same symbol still can. Regression test. Fleet lesson 13.
+- **BUG (fixed): a protective stop fill races reconcile and freezes the engine.** bold's
+  NVDA breakeven stop filled at 19:07:16 UTC; the tick had synced fills seconds earlier,
+  `positions()` then showed NVDA 0 → `reconcile mismatch: NVDA book=3.0 broker=0.0
+  (missing)` → freeze at 19:07:19 → the stop fill was applied at 19:08. Same family as the
+  08-21 sleeve-breaker bug: the machine's own defence read as a disaster. Fix: when a
+  missing/short mismatch is on a symbol with a resting engine stop, re-sync fills once and
+  re-reconcile before freezing; a real mismatch still freezes. Regression test.
+  **bold is STILL FROZEN** (`frozen: true` in data-shadows/bold/book.json, reason above) —
+  the freeze is sticky by design and there is no `ibagent unfreeze`; the fix only prevents
+  the next one. Owner call to clear it (entries blocked, exits unaffected). Follow-up worth
+  doing: an `ibagent unfreeze` command so a false freeze doesn't need a hand-edit of book.json.
+- **NOT deployed.** Both fixes affect the running supervisors; task control (PowerShell)
+  was denied in tonight's session so the documented stop→verify→start dance could not be
+  verified. The fleet runs the old code until the next supervisor restart — Monday's open
+  will re-fire stale headlines unless restarted before 09:30 ET.
+- **Fleet after 9 trading days**: twin +13.20, scalper −0.98, turtle −29.80, bold −30.41,
+  swing −31.76, sniper −42.36, main −100.23. NVDA −4.5% on the day cost every holder
+  (main −40.88, turtle −30.78, swing −20.48); all stops except bold's still ~3% away. main
+  vs SPY since 08-24: −165. twin's SMH re-attempt was rejected again ("weekly turnover cap
+  reached") — the core-fills-count-as-turnover issue from last night, resets Monday 08-31.
+- **scalper: 14 runs, 14 no_change, same blocker** (intraday fields null) — the RTH
+  `day_change` probe was not run tonight either (no RTH session for me); it stays the
+  design-deciding question. Its 30-min scan remains pure cost.
+- sniper's first CRM event fired at 13:34 UTC = 09:34 ET — inside `is_rth` but the plan
+  held with "outside RTH trade window" (equity 0.0 in the plan line): the event gate and
+  the order window disagree by a few minutes at the open. Cost one event slot + one run.
+  Small; aligning the gate to the trade window is a candidate for a quiet night.
+- OneDrive PermissionError: main 16:09 UTC → 14+ total. Nightly 04:45 blip and the 21:07
+  UTC reset (turtle only, reconnected 21:12) behaved as documented.
+
 ## 2026-08-27 (night, engineer) — NVDA day: the fleet finally bought a catalyst, and the event gate slept through it
 
 - **First catalyst trades of the forward test.** NVDA beat-and-raise (after the 08-26 close)
