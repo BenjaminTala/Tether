@@ -114,15 +114,18 @@ class EventGateState:
     day: str = ""                        # ISO date the counter belongs to
     count_today: int = 0
     last_trigger_ts: float = 0.0
+    fired_keys: List[str] = field(default_factory=list)   # headlines already run today
 
     def as_dict(self) -> dict:
-        return {"day": self.day, "count_today": self.count_today, "last_trigger_ts": self.last_trigger_ts}
+        return {"day": self.day, "count_today": self.count_today,
+                "last_trigger_ts": self.last_trigger_ts, "fired_keys": list(self.fired_keys)}
 
     @classmethod
     def from_dict(cls, d: Optional[dict]) -> "EventGateState":
         d = d or {}
         return cls(day=str(d.get("day", "")), count_today=int(d.get("count_today", 0)),
-                   last_trigger_ts=float(d.get("last_trigger_ts", 0.0)))
+                   last_trigger_ts=float(d.get("last_trigger_ts", 0.0)),
+                   fired_keys=[str(k) for k in d.get("fired_keys", [])])
 
 
 @dataclass(frozen=True)
@@ -148,7 +151,7 @@ def check_event_gate(cfg: EventCfg, state: EventGateState, scored: Sequence[Scor
     now = now.astimezone(timezone.utc)
     today = now.date().isoformat()
     if state.day != today:
-        state.day, state.count_today = today, 0
+        state.day, state.count_today, state.fired_keys = today, 0, []
     if not can_fire:
         return None
     if cfg.max_per_day <= 0 or state.count_today >= cfg.max_per_day:
@@ -158,6 +161,12 @@ def check_event_gate(cfg: EventCfg, state: EventGateState, scored: Sequence[Scor
     candidates: List[EventTrigger] = []
     for s in scored:
         if s.score < cfg.min_materiality:
+            continue
+        # One headline = one run per day. 2026-08-28: a single CRM piece re-fired every
+        # cooldown on all 7 variants (3-4 runs each, 24 fleet-wide) and every run said
+        # "same headline, same answer". The digest keeps items for 36h, so without this a
+        # stale story eats the day's whole event budget on nothing new.
+        if _trigger_key(s.item) in state.fired_keys:
             continue
         for sym in s.symbols:
             if sym not in held and sym not in watched:
@@ -172,4 +181,9 @@ def check_event_gate(cfg: EventCfg, state: EventGateState, scored: Sequence[Scor
     best = max(candidates, key=lambda t: (t.score, abs(t.move_pct)))
     state.count_today += 1
     state.last_trigger_ts = now.timestamp()
+    state.fired_keys.append(best.link or best.headline)
     return best
+
+
+def _trigger_key(item) -> str:
+    return item.link or item.title[:200]

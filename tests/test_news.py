@@ -79,12 +79,16 @@ def test_event_gate_fires_and_respects_budget():
     assert t is not None and t.symbol == "AAPL" and state.count_today == 1
     # cooldown blocks an immediate second fire
     assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW) is None
-    # after cooldown, budget allows one more, then exhausted
+    # after cooldown, a NEW headline gets the second slot, then the budget is exhausted
+    fresh = score_items([NewsItem(id="n2", source="s", title="Apple guidance cut, earnings miss",
+                                  link="https://x.test/apple-2", summary="AAPL",
+                                  published=NOW.isoformat(), fetched=NOW.isoformat())], ["AAPL"])
     later = NOW + timedelta(hours=3)
-    assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, later)
+    assert check_event_gate(gate_cfg(), state, fresh, {"AAPL"}, set(), {"AAPL": -0.05}, later)
     even_later = NOW + timedelta(hours=7)
-    assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, even_later) is None
-    # new day resets the counter
+    assert check_event_gate(gate_cfg(), state, scored + fresh, {"AAPL"}, set(), {"AAPL": -0.05},
+                            even_later) is None
+    # new day resets the counter (and the per-headline memory)
     tomorrow = NOW + timedelta(days=1)
     assert check_event_gate(gate_cfg(), state, scored, {"AAPL"}, set(), {"AAPL": -0.05}, tomorrow)
 
@@ -101,6 +105,22 @@ def test_event_gate_outside_rth_spends_nothing():
     # first in-RTH poll fires with the full budget intact
     t = check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW)
     assert t is not None and st.count_today == 1
+
+
+def test_event_gate_fires_each_headline_once_per_day():
+    """2026-08-28: one CRM headline re-fired every cooldown on all 7 variants (24 runs
+    fleet-wide), each answering 'same headline, same answer'."""
+    scored = score_items(items(), ["AAPL"])
+    st = EventGateState()
+    assert check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW)
+    later = NOW + timedelta(hours=3)                      # cooldown over, budget left
+    assert check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.05}, later) is None
+    assert st.count_today == 1                            # nothing spent on the repeat
+    # the dedupe survives a state round-trip and resets with the day
+    st2 = EventGateState.from_dict(st.as_dict())
+    assert check_event_gate(gate_cfg(), st2, scored, {"AAPL"}, set(), {"AAPL": -0.05}, later) is None
+    assert check_event_gate(gate_cfg(), st2, scored, {"AAPL"}, set(), {"AAPL": -0.05},
+                            NOW + timedelta(days=1))
 
 
 def test_event_gate_requires_move_and_holding():
