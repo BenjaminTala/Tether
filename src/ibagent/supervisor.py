@@ -382,6 +382,16 @@ class Supervisor:
             self.journal.record("error", {"where": "reconcile", "err": str(exc)})
             return
         mismatches = self.book.reconcile(broker_positions, dedicated=self.m.account.dedicated)
+        if mismatches and not self.book.frozen and any(
+                x.kind in ("missing", "short") and self.book.positions[x.symbol].stop_order_tag
+                for x in mismatches):
+            # A GTC stop that fires between this tick's fill sync and positions() looks like
+            # a vanished position. 2026-08-28: bold's NVDA stop filled at 19:07:16, the tick
+            # had synced fills seconds earlier, reconcile froze the engine at 19:07:19 and the
+            # stop fill was applied at 19:08 — a false freeze for the machine's own exit.
+            # Re-sync once and re-check; a real mismatch still freezes below.
+            self._sync_external_fills(utc(self.now_fn()))
+            mismatches = self.book.reconcile(broker_positions, dedicated=self.m.account.dedicated)
         if mismatches and not self.book.frozen:
             detail = "; ".join(f"{x.symbol} book={x.book_qty} broker={x.broker_qty} ({x.kind})"
                                for x in mismatches)

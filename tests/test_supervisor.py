@@ -62,6 +62,27 @@ def test_reconcile_mismatch_freezes(env):
     assert sup.book.frozen and "SPY" in sup.book.frozen_reason
 
 
+def test_stop_fill_racing_reconcile_does_not_freeze(env):
+    """2026-08-28 bold: NVDA's GTC stop filled between the tick's fill sync and positions();
+    reconcile saw 'NVDA book=3 broker=0 (missing)' and froze the engine for its own exit."""
+    m, broker, sup, clock, tmp = env
+    enter(sup, broker, "SPY", "trend", 2.0, 100.0)
+    real_positions = broker.positions
+
+    def positions_after_stop_fired():
+        # the stop fires "now": broker is flat and the fill exists, but only after this call
+        broker._positions.pop("SPY", None)
+        broker._fills.append(Fill("9", "stp-SPY", "SPY", "SELL", 2.0, 90.0, 0.35,
+                                  NOW + timedelta(seconds=5)))
+        broker.positions = real_positions
+        return real_positions()
+    broker.positions = positions_after_stop_fired
+    sup.tick(clock())
+    assert not sup.book.frozen
+    assert "SPY" not in sup.book.positions            # the stop fill was applied instead
+    assert _journal_kinds(tmp, "fill")
+
+
 def test_shared_account_extra_broker_positions_ignored(env):
     m, broker, sup, clock, tmp = env
     broker.force_position("AAPL", 10, 150.0)               # the human's own shares
