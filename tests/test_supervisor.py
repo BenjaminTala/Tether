@@ -410,3 +410,23 @@ def test_refresh_bars_is_bounded_and_skips_known_failures(env):
     fresh = sup._refresh_bars(["SPY", "QQQ"], date(2026, 8, 12))
     assert sorted(fresh) == ["QQQ", "SPY"] and sorted(calls) == ["QQQ", "SPY"]
     assert sup._bars_cache["SPY"]                            # refreshed bars land in the cache
+
+
+def test_fleet_digest_fires_friday_and_covers_the_whole_week(env, monkeypatch):
+    """FLEET.md 'Week of 2026-08-24' said 'decisions 0' for all 7 variants: the digest fired
+    MONDAY after the close, so each 'week' held one day (and tail(60) capped the count)."""
+    from ibagent.journal import Journal
+    m, broker, sup, clock, tmp = env
+    monkeypatch.chdir(tmp)
+    j = Journal(tmp / "data" / "journal")
+    monday = datetime(2026, 8, 24, 14, 0, tzinfo=timezone.utc)
+    for i in range(70):                                     # more than the old tail(60) cap
+        j.record("decision", {"action": "no_change", "lessons": f"l{i}"}, ts=monday + timedelta(hours=i))
+    j.record("decision", {"action": "no_change"}, ts=monday - timedelta(days=3))   # last week
+    sup._maybe_fleet_digest(monday)                          # Monday: nothing yet
+    assert not (tmp / "FLEET.md").exists()
+    sup._maybe_fleet_digest(monday + timedelta(days=4, hours=7))   # Friday after the close
+    text = (tmp / "FLEET.md").read_text(encoding="utf-8")
+    assert "## Week of 2026-08-24" in text and "decisions 70" in text and "lesson: l69" in text
+    sup._maybe_fleet_digest(monday + timedelta(days=4, hours=8))   # once per week
+    assert text.count("Week of") == 1 == (tmp / "FLEET.md").read_text(encoding="utf-8").count("Week of")

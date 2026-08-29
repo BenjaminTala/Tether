@@ -882,11 +882,13 @@ class Supervisor:
         return out
 
     def _maybe_fleet_digest(self, now: datetime) -> None:
-        """Mondays after the close report: append the shared FLEET.md — each variant's week
-        (performance + trades) and the lessons its model wrote for itself. Deterministic
-        aggregation; costs no AI runs."""
+        """After the LAST close report of the week (Friday, or later if Friday had none):
+        append the shared FLEET.md — each variant's week (performance + trades) and the
+        lessons its model wrote for itself. Deterministic aggregation; costs no AI runs.
+        (Until 2026-08-29 this fired on MONDAY, so every 'week' held one day: the 08-24
+        digest reported 'decisions 0' for all 7 variants across the NVDA week.)"""
         monday = _monday(now.astimezone(self.tz).date())
-        if now.astimezone(self.tz).weekday() != 0 or self.state.last_fleet_digest == monday:
+        if now.astimezone(self.tz).weekday() < 4 or self.state.last_fleet_digest == monday:
             return
         self.state.last_fleet_digest = monday
         self.state.save(self.data_dir / "schedule_state.json")
@@ -898,8 +900,9 @@ class Supervisor:
             for name, jdir in variants:
                 j = Journal(jdir)
                 week_cut = f"{monday}T00:00:00"
-                decisions = [e for e in j.tail(60, kinds=("decision",)) if e["ts"] >= week_cut]
-                fills = [e for e in j.tail(120, kinds=("fill",)) if e["ts"] >= week_cut]
+                # no tail() cap: scalper alone writes ~14 decisions a day
+                decisions = [e for e in j.iter(kinds=("decision",)) if e["ts"] >= week_cut]
+                fills = [e for e in j.iter(kinds=("fill",)) if e["ts"] >= week_cut]
                 realized = sum(e["payload"].get("realized", 0) or 0 for e in fills
                                if isinstance(e["payload"].get("realized"), (int, float)))
                 traded = sorted({e["payload"].get("symbol", "?") for e in fills})
