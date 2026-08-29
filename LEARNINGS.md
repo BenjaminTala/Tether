@@ -1,5 +1,29 @@
 # Live-session learnings
 
+## 2026-08-29 (Saturday night, engineer) — quiet tape; the weekly digest was reporting Mondays
+
+- **No session today.** Since last night's pass the journals hold only the documented
+  nightly noise: the 20:05 ET cache fill failing its first 3 symbols on every variant
+  (00:01–00:06 UTC, recovered 04:51–04:53), the 04:45 UTC reset blip (Socket disconnect →
+  reconnected within 5 min, one line per variant), and two extra 30-s timeouts (sniper/
+  turtle 04:33, twin 02:07) that the hysteresis absorbed. Nothing traded, nothing rejected.
+- **BUG (fixed): FLEET.md's weekly digest fired on MONDAY after the close.** The "Week of
+  2026-08-24" section says `decisions 0` for all 7 variants — for the week that held the
+  NVDA print, the first catalyst trades and 24 CRM event runs. The digest ran Monday
+  evening (the outage day), covered one day, and then marked the week done; `tail(60)`
+  would also have capped scalper's ~70 decisions/week. Now fires after the last close
+  report of the week (Friday, or later if Friday had none) and counts the whole week.
+  Regression test. First correct digest: Fri 2026-09-04. The stale Monday entry in
+  FLEET.md is left as-is (it is generated, untracked output).
+- **`ibagent unfreeze [--shadow NAME]` exists now** (last night's follow-up). It refuses
+  while the variant's heartbeat is < 3 min old, because two writers on book.json is worse
+  than a stuck freeze: stop the task → unfreeze → start. bold is still frozen; whether to
+  clear it remains the owner's call, but it no longer needs a hand edit.
+- **Deployment**: `schtasks` is reachable from this session (PowerShell is not), so the
+  stop → verify → start dance was attempted tonight — see the report for the outcome.
+  With last night's two fixes and tonight's two changes, the fleet is running four
+  commits of undeployed code until that restart succeeds.
+
 ## 2026-08-28 (night, engineer) — one headline, 24 runs; the machine froze itself for its own stop
 
 - **BUG (fixed): the event gate re-fired the same headline after every cooldown.** CNBC's
