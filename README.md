@@ -124,6 +124,9 @@ awake then.
   Manager via keyring) — never in files. `ANTHROPIC_API_KEY` must NOT be set anywhere for this user.
 * Kill: `ibagent kill` (or create `data\KILL`) → open orders cancelled, no new orders, alert.
   Resume: `ibagent unkill` then restart the `IBAgent-Supervisor` task.
+* False freeze (reconcile mismatch that turned out to be the engine's own stop fill): stop the
+  variant's task → `ibagent unfreeze [--shadow NAME]` → start it. Refuses while the heartbeat
+  is fresh. A real mismatch: fix the broker/book first, then unfreeze.
 * Capital: `ibagent capital add|withdraw N --note "..."`; withdrawals are satisfied from pot cash
   at the next trading window (active sleeves trimmed pro-rata first, then core).
 * Change region/profile: `universe.profile: ucits` (verify each line in TWS first).

@@ -81,6 +81,34 @@ def cmd_kill(args: argparse.Namespace, engage: bool) -> int:
     return 0
 
 
+def cmd_unfreeze(args: argparse.Namespace, now: Optional[Any] = None) -> int:
+    """Clear a reconcile freeze by hand (owner action). Refuses while the supervisor that owns
+    the book is alive — two writers on book.json is worse than a stuck freeze. Stop the task,
+    unfreeze, start it again. 2026-08-28: bold froze for its own NVDA stop fill and the only
+    remedy was a hand edit of data-shadows/bold/book.json."""
+    from datetime import datetime, timedelta, timezone
+    from ibagent.book import Book
+    data_dir = Path("data-shadows") / args.shadow if getattr(args, "shadow", None) else Path("data")
+    hb = data_dir / "heartbeat.txt"
+    if hb.exists():
+        try:
+            last = datetime.fromisoformat(hb.read_text(encoding="utf-8").strip())
+        except ValueError:
+            last = None
+        if last is not None and (now or datetime.now(timezone.utc)) - last < timedelta(seconds=180):
+            raise RuntimeError(f"supervisor for {data_dir} is running (heartbeat {last:%H:%M:%S}); "
+                               f"stop its scheduled task first, then unfreeze, then start it again")
+    book = Book.load(data_dir / "book.json")
+    if not book.frozen:
+        print(f"{data_dir}: not frozen")
+        return 0
+    reason = book.frozen_reason
+    book.unfreeze()
+    book.save()
+    print(f"{data_dir}: unfrozen (was: {reason[:200]})")
+    return 0
+
+
 def cmd_secret(args: argparse.Namespace) -> int:
     from ibagent.alerts import set_secret
     value = getpass.getpass(f"value for {args.name}: ")
@@ -424,6 +452,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp("kill", help="engage the kill switch")
     sp("unkill", help="clear the kill switch")
+    uf = sp("unfreeze", help="clear a reconcile freeze (stop the variant's task first)")
+    uf.add_argument("--shadow", help="variant name under data-shadows/ (default: main)")
     sec = sp("secret"); secsub = sec.add_subparsers(dest="secret_cmd", required=True)
     ss = secsub.add_parser("set", parents=[common]); ss.add_argument("name")
 
@@ -459,6 +489,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_kill(args, True)
         if args.cmd == "unkill":
             return cmd_kill(args, False)
+        if args.cmd == "unfreeze":
+            return cmd_unfreeze(args)
         if args.cmd == "secret":
             return cmd_secret(args)
         if args.cmd == "broker":
