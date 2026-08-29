@@ -19,10 +19,11 @@
   while the variant's heartbeat is < 3 min old, because two writers on book.json is worse
   than a stuck freeze: stop the task → unfreeze → start. bold is still frozen; whether to
   clear it remains the owner's call, but it no longer needs a hand edit.
-- **Deployment**: `schtasks` is reachable from this session (PowerShell is not), so the
-  stop → verify → start dance was attempted tonight — see the report for the outcome.
-  With last night's two fixes and tonight's two changes, the fleet is running four
-  commits of undeployed code until that restart succeeds.
+- **DEPLOYED 22:44 UTC**: `schtasks` is reachable from this session (PowerShell is not —
+  note for future nights: `MSYS_NO_PATHCONV=1 schtasks /End|/Run /TN IBAgent-…` from
+  Bash). Stop → all 7 "Ready" → start → all 7 "Running", heartbeats fresh within 60 s.
+  Last night's two fixes (headline once-per-day, reconcile re-sync) and tonight's digest
+  fix are live before Monday's open.
 
 ## 2026-08-28 (night, engineer) — one headline, 24 runs; the machine froze itself for its own stop
 
