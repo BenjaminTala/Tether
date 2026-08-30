@@ -224,7 +224,22 @@ class IBKRBroker:
                 last = exc
                 log.warning("IB connect attempt %d/%d failed: %s", i + 1, attempts, exc)
                 self.sleep(2.0 * (i + 1))
-        raise BrokerError(f"cannot connect to IB Gateway at {self.cfg.host}:{self.cfg.port}: {last}")
+        raise BrokerError(self._connect_failure_msg(last))
+
+    def _connect_failure_msg(self, last: Optional[BaseException]) -> str:
+        """The two dominant failure shapes need opposite human responses, and the raw
+        exception text does not distinguish them (2026-08-30: a 10h Sunday outage journaled
+        'cannot connect ...: ' — the Gateway was up and listening but logged out after its
+        weekly auto-restart, while the empty message read like a dead process)."""
+        where = f"IB Gateway at {self.cfg.host}:{self.cfg.port}"
+        if isinstance(last, TimeoutError):
+            return (f"cannot connect to {where}: port accepted but the API handshake timed out"
+                    f" - the Gateway process is likely up but LOGGED OUT (auto-restart with"
+                    f" nobody home); it needs a manual login")
+        if isinstance(last, ConnectionRefusedError):
+            return (f"cannot connect to {where}: connection refused - no Gateway process is"
+                    f" listening; IB Gateway needs to be started")
+        return f"cannot connect to {where}: {last}"
 
     def disconnect(self) -> None:
         if self.ib.isConnected():

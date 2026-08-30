@@ -62,6 +62,38 @@ def test_timed_out_request_fails_fast_and_drops_the_link():
     assert b.ib.disconnected is True
 
 
+class LoggedOutIB(DeadIB):
+    """TCP accepts but the API greeting never comes: Gateway up, nobody logged in.
+    ib_async surfaces this as a bare TimeoutError with no message."""
+
+    def connect(self, *args, **kwargs):
+        raise TimeoutError()
+
+    def sleep(self, seconds):
+        pass
+
+
+class NoProcessIB(DeadIB):
+    def connect(self, *args, **kwargs):
+        raise ConnectionRefusedError(10061, "No connection could be made")
+
+    def sleep(self, seconds):
+        pass
+
+
+def test_connect_failure_names_the_logged_out_state():
+    """2026-08-30: Gateway auto-restarted Sunday 12:20 UTC and sat logged out for 10+ hours;
+    every variant journaled 'cannot connect ...: ' with an EMPTY reason. The owner must be
+    able to tell 'log in on the PC' apart from 'start the Gateway' from the alert alone."""
+    cfg = BrokerCfg(port=4002, client_id=1, connect_timeout_s=20)
+    b = IBKRBroker(cfg, ib=LoggedOutIB())
+    with pytest.raises(BrokerError, match="LOGGED OUT.*manual login"):
+        b.connect(attempts=1)
+    b = IBKRBroker(cfg, ib=NoProcessIB())
+    with pytest.raises(BrokerError, match="connection refused.*needs to be started"):
+        b.connect(attempts=1)
+
+
 def test_daily_bars_uses_short_timeout_and_fails_closed_on_empty():
     b = _broker(bars_timeout_s=7)
     with pytest.raises(BrokerError, match="no historical bars"):

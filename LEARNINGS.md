@@ -1,5 +1,29 @@
 # Live-session learnings
 
+## 2026-08-30 (Sunday night, engineer) — the Gateway is UP, LISTENING and LOGGED OUT, and nobody could tell
+
+- **ONGOING at 22:45 UTC: Gateway logged out since ~12:20 UTC Sunday (10+ h).** All 7
+  variants dropped at 12:20–12:29 and journaled exactly one `connect` error each
+  (hysteresis: correct) — but the line read `cannot connect to IB Gateway at
+  127.0.0.1:4002: ` with an EMPTY reason. Diagnosis tonight: `ibgateway.exe` is running
+  and port 4002 is LISTENING; the API handshake times out — the weekly auto-restart hit
+  with nobody home, same failure as the lost Monday (08-24). The empty message is because
+  ib_async raises a bare `TimeoutError()` for handshake-timeout, so "up but logged out"
+  was indistinguishable from "process dead". **If Benjamin does not log in before Monday
+  09:30 ET, the fleet is blind at the open again** (GTC stops still stand guard, as
+  08-24 proved). The 08-23 weekend outage self-recovered Sun ~23:29 UTC; this one may
+  too, but the pattern is now 3 outages in 3 weekends — Auto-restart/IBC remains the fix
+  and remains an owner task.
+- **BUG (fixed): the connect-failure alert now names the state and the required action.**
+  Handshake timeout → "port accepted but the API handshake timed out — Gateway is likely
+  up but LOGGED OUT; it needs a manual login". Connection refused → "no Gateway process
+  is listening; IB Gateway needs to be started". Anything else keeps the raw text. The
+  hourly "broker still unreachable" reminder carries the same string, so the owner can
+  tell "log in" from "start it" from the phone. Regression test. Deployed tonight.
+- Saturday was otherwise silent (only the 04:45 UTC reset blip, one line per variant) and
+  Sunday held no market session; the 08-29 digest/unfreeze deploys have seen no traffic
+  yet — first real exercise is Monday.
+
 ## 2026-08-29 (Saturday night, engineer) — quiet tape; the weekly digest was reporting Mondays
 
 - **No session today.** Since last night's pass the journals hold only the documented
