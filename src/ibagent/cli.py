@@ -105,6 +105,10 @@ def cmd_unfreeze(args: argparse.Namespace, now: Optional[Any] = None) -> int:
     reason = book.frozen_reason
     book.unfreeze()
     book.save()
+    # Leave a trace in the variant's own journal: on 2026-08-31 bold turned up unfrozen and
+    # the forensics could not say when or by whom — a freeze/unfreeze pair must be auditable.
+    from ibagent.journal import Journal
+    Journal(data_dir / "journal").record("unfreeze", {"by": "ibagent unfreeze", "was": reason})
     print(f"{data_dir}: unfrozen (was: {reason[:200]})")
     return 0
 
