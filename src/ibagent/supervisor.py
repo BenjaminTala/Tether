@@ -34,7 +34,8 @@ from ibagent.data import SymbolStats, atr as calc_atr, stats_table
 from ibagent.execution import Executor
 from ibagent.journal import Journal
 from ibagent.llm.runner import ClaudeCodeRunner, LLMRunner
-from ibagent.marketclock import is_rth, is_trading_day, previous_trading_day, utc
+from ibagent.marketclock import (in_no_trade_window, is_rth, is_trading_day,
+                                 previous_trading_day, utc)
 from ibagent.news.ingest import DEFAULT_FEEDS, NewsStore, poll as news_poll
 from ibagent.news.scoring import (EventGateState, build_digest, check_event_gate, score_items)
 from ibagent.schemas import decision_json_schema_text
@@ -459,8 +460,10 @@ class Supervisor:
 
         # Intraday variant runs (day-trader shadows): an extra model decision every N minutes
         # of the regular session, budgeted by the same daily invocation cap as everything else.
+        # Gated on the ORDER window, not bare RTH: a scan fired inside the open buffer is a
+        # guaranteed "outside RTH trade window" hold (scalper 2026-08-31 09:31 ET).
         im = self.m.cadence.intraday_minutes
-        if im > 0 and is_trading_day(today) and is_rth(now) \
+        if im > 0 and is_trading_day(today) and self._orders_can_fill(now) \
                 and now.timestamp() - self.state.last_intraday_ts >= im * 60:
             self.state.last_intraday_ts = now.timestamp()
             self.state.save(self.data_dir / "schedule_state.json")
@@ -533,18 +536,30 @@ class Supervisor:
         if need_quotes:
             quotes = {**quotes, **self._quotes(need_quotes)}
         moves = self._day_moves(held | watched, quotes, now)
-        # Outside RTH the gate must not consume budget/cooldown: the run below cannot fire,
-        # and pre-market headlines would otherwise spend the day's events before the open.
+        # While orders cannot fill the gate must not consume budget/cooldown: the run below
+        # cannot act, and pre-market headlines would otherwise spend the day's events before
+        # the open (2026-08-27). "Cannot fill" includes the open/close no-trade buffers, not
+        # just closed hours: sniper's 09:34 ET event run on 2026-08-28 was a guaranteed hold.
+        # The headline stays in the digest and fires at the first poll inside the window.
         trigger = check_event_gate(self.m.cadence.event, gate, self._scored_recent,
-                                   held, watched, moves, now, can_fire=is_rth(now))
+                                   held, watched, moves, now,
+                                   can_fire=self._orders_can_fill(now))
         self.state.event_gate = gate.as_dict()
         self.state.save(self.data_dir / "schedule_state.json")
-        if trigger and is_rth(now):
+        if trigger:
             note = (f"# Event trigger\n\nsymbol: {trigger.symbol}\nmateriality: {trigger.score}\n"
                     f"day move: {trigger.move_pct:+.1%}\nheadline: {trigger.headline}\n{trigger.link}\n")
             self.journal.record("event_trigger", {"symbol": trigger.symbol, "score": trigger.score,
                                                   "move": trigger.move_pct, "headline": trigger.headline})
             self._agent_job("event", now, event_note=note)
+
+    def _orders_can_fill(self, now: datetime) -> bool:
+        """True while an entry order submitted now can actually fill: inside RTH and outside
+        the mandate's open/close no-trade buffers — the same gate `risk.plan_orders` applies.
+        Model runs that produce orders must not fire outside this window; their plan is a
+        guaranteed hold and the run (and any event slot) is wasted."""
+        ex = self.m.execution
+        return not in_no_trade_window(now, ex.no_trade_first_minutes, ex.no_trade_last_minutes)
 
     def _day_moves(self, symbols: Set[str], quotes: Dict[str, Quote], now: datetime) -> Dict[str, float]:
         moves: Dict[str, float] = {}

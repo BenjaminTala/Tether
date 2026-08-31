@@ -430,3 +430,41 @@ def test_fleet_digest_fires_friday_and_covers_the_whole_week(env, monkeypatch):
     assert "## Week of 2026-08-24" in text and "decisions 70" in text and "lesson: l69" in text
     sup._maybe_fleet_digest(monday + timedelta(days=4, hours=8))   # once per week
     assert text.count("Week of") == 1 == (tmp / "FLEET.md").read_text(encoding="utf-8").count("Week of")
+
+
+def test_model_runs_wait_for_the_order_window(md, tmp_path):
+    """2026-08-31: scalper's first intraday scan fired at ~09:31 ET, inside the open
+    no-trade buffer; the plan was a guaranteed 'outside RTH trade window' hold — one model
+    run wasted. Sniper's 09:34 ET event run on 2026-08-28 was the same failure via the news
+    gate. Runs that produce orders fire only while orders can fill (RTH minus the buffers)."""
+    md["llm"]["sandbox"]["runs_root"] = str(tmp_path / "runs")
+    md["journal"]["dir"] = str(tmp_path / "journal")
+    md["kill_switch"]["file"] = str(tmp_path / "KILL")
+    md["cadence"]["intraday_minutes"] = 30
+    m = mandate_from_dict(md)
+    broker = SimBroker(SimConfig(initial_cash=1000.0))
+    broker.connect()
+    broker.set_time(NOW)
+    clock = Clock(NOW)
+    sup = Supervisor(m, broker, runner=FakeRunner([]), data_dir=tmp_path, alerter=Alerter([]),
+                     now_fn=clock, sleeper=lambda s: None, feeds=[],
+                     skills_dir=tmp_path / "no-skills")
+
+    buffers = (m.execution.no_trade_first_minutes, m.execution.no_trade_last_minutes)
+    assert buffers == (15, 10)                               # mandate values this test assumes
+
+    clock.now = datetime(2026, 8, 12, 13, 35, tzinfo=timezone.utc)   # 09:35 ET: RTH, in buffer
+    assert not sup._orders_can_fill(clock.now)
+    sup.tick(clock.now)
+    assert sup.state.last_intraday_ts == 0.0                 # scan NOT consumed in the buffer
+
+    clock.now = datetime(2026, 8, 12, 13, 46, tzinfo=timezone.utc)   # 09:46 ET: window open
+    assert sup._orders_can_fill(clock.now)
+    sup.tick(clock.now)
+    assert sup.state.last_intraday_ts == clock.now.timestamp()       # first scan fires now
+
+    sup.state.last_intraday_ts = 0.0                         # close buffer: 15:52 ET
+    clock.now = datetime(2026, 8, 12, 19, 52, tzinfo=timezone.utc)
+    assert not sup._orders_can_fill(clock.now)
+    sup.tick(clock.now)
+    assert sup.state.last_intraday_ts == 0.0
