@@ -1,5 +1,36 @@
 # Live-session learnings
 
+## 2026-08-31 (Monday night, engineer) — the weekend outage self-healed in time; runs stop firing into the open buffer
+
+- **The Sunday logout resolved at 01:43 UTC Monday** (journal: `reconnected, down_minutes:
+  178, failed_attempts: 29` — the counter only spans the handshake-timeout phase; the full
+  logout ran ~13h from 12:20 UTC Sunday). Third weekend outage, third self-recovery before
+  the open — but 08-24 proved it will not always land that way. Auto-restart/IBC remains
+  the highest-value owner task. The new "LOGGED OUT vs process gone" alert text fired
+  correctly at 22:44 UTC Sunday, its first live use.
+- **Monday was a quiet, healthy session**: all 7 variants made their weekly + daily
+  decisions (first weekly since the digest fix), every one `no_change` on a soft tape
+  (SPY −0.43%, regime neutral everywhere). Zero orders, zero rejections, zero errors
+  during RTH. main +3.70 on the day; NVDA recovered +1.4%. twin's turnover budget reset
+  today and it still chose not to re-attempt SMH — its own call, not a cap.
+- **The 08-28 headline-dedup fix passed its first live test**: the GOOGL "new buyer class"
+  piece (0.7) fired main and twin exactly once each at 18:11 UTC — no cooldown re-fires.
+- **BUG (fixed): model runs fired inside the no-trade buffers and their plans were
+  guaranteed holds.** scalper's first intraday scan started ~09:31 ET Monday and planned
+  against that frozen timestamp → "outside RTH trade window", equity 0.0, one model run
+  wasted; sniper's 09:34 ET event run on 08-28 was the same failure via the news gate
+  (which only checked `is_rth`). Both paths now gate on `_orders_can_fill` — RTH minus the
+  mandate's open/close buffers, the exact predicate `risk.plan_orders` holds on. A
+  buffered headline stays in the digest and fires at the first poll inside the window.
+  Regression test. Same family as 08-18/08-27: spend runs and budgets only where the
+  market can act on them.
+- **bold is unfrozen and trading again** (weekly + daily ran normally Monday) — but its
+  journal holds no record of when or how the freeze was cleared. `ibagent unfreeze` now
+  writes an `unfreeze` journal line (by/was) so a freeze/unfreeze pair is auditable.
+- The bars farm flaked again at 13:47 UTC (ABBV/ADBE/AMD on every variant, ~50 skipped) —
+  the breaker served cached bars and decisions were unaffected; per-symbol farm flakiness
+  as diagnosed 08-27. `day_change` RTH probe still not run (no RTH engineer session yet).
+
 ## 2026-08-30 (Sunday night, engineer) — the Gateway is UP, LISTENING and LOGGED OUT, and nobody could tell
 
 - **ONGOING at 22:45 UTC: Gateway logged out since ~12:20 UTC Sunday (10+ h).** All 7
