@@ -1028,6 +1028,8 @@ class Supervisor:
             "intents": [f"{i.side} {i.symbol} ${i.usd:.2f}" for i in intents],
             "filled": report.filled, "complete": complete,
             "sweep": sweep, "errors": report.errors})
+        # a partial attempt may retry every tick (2026-09-01: 245 identical Telegram
+        # alerts in one session) — only the once-per-period completion skips dedupe
         self.alerter.info("🏦 core rebalance" + ("" if complete else " (partial — will retry)"),
                           "\n".join(f"{i.side} {i.symbol} ${i.usd:.2f}" for i in intents),
-                          dedupe=False)
+                          dedupe=not complete)

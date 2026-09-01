@@ -1,5 +1,41 @@
 # Live-session learnings
 
+## 2026-09-01 (Tuesday night, engineer) — the rebalance that could never fill alerted 245 times
+
+- **BUG (fixed): the monthly core rebalance retried an unfillable whole-share intent every
+  tick, all session.** Sep-1 was rebalance day; every variant's VTI top-up came to ~$330
+  while one VTI share costs ~$375. In whole-share mode that intent can never fill, but the
+  retry-until-complete logic (correct for transient failures) re-ran it every ~minute from
+  10:00 to 15:30 ET: 234–288 journal lines per variant, and — because the rebalance alert
+  passes `dedupe=False` — **~245 identical "core rebalance (partial — will retry)" Telegram
+  messages to the owner from main alone**. The 08-18 rule ("an alert that repeats without
+  new information kills the channel") violated by our own code. Two fixes: `core_rebalance`
+  no longer emits an intent below one share's price (the holding is as close to target as
+  whole shares allow → period completes), and the partial-retry alert now dedupes (only the
+  once-per-period completion skips dedupe). Regression test. Without deploy the storm
+  resumes at 10:00 ET tomorrow, so tonight's restart dance matters.
+- **First genuinely red day handled cleanly by the machinery**: risk-off tape (10y 4.78%,
+  Brent >$92). Five protective stop fills — bold SPY −23.51, swing SPY −4.29 + XLF −16.84,
+  scalper XLF −8.17 + QQQ −17.31 — and bold + swing each tripped the 3-losing-trades
+  breaker (entries paused until 09-03, exits unaffected). All by design; no false freezes,
+  the 08-28 stop-fill/reconcile fix held. bold also made the fleet's only entry (XOM 7 sh)
+  minutes before the tape soured.
+- **A multi-day story burns event slots one fresh link at a time.** The AAPL CEO transition
+  (Cook → Ternus) produced three DIFFERENT headlines from three outlets 14:39–16:12 UTC;
+  each passed the once-per-day headline dedup (it keys on the link) and fired sniper at
+  0.65 materiality — 3 of its event slots on one already-known fact. Sniper triaged all
+  three correctly (Soft/Noise, no_change), so the cost is run budget, not bad trades.
+  Candidate fix written down, not coded: a per-symbol-per-day event cap, or dedup on
+  (symbol, day) after the first no_change verdict — that is a news-gate semantics change
+  and deserves a calm look, not a night edit.
+- scalper: 13 more intraday runs, 13 no_change, still blocked on null intraday fields; the
+  RTH `day_change` probe remains not-run (engineer sessions keep landing after the close).
+  Standing note: whoever gets an RTH session first should run the one-off 1-day-bar probe
+  from 08-27 before any day-trader design work.
+- Fleet after 11 trading days (all-time): twin −20.91, scalper −49.75, bold −61.53,
+  turtle −80.69, sniper −85.18, swing −94.51, main −137.39. Everyone red but within
+  ordinary beta; twin (tiered fees, same brain as main) still leads the A/B by ~$116.
+
 ## 2026-08-31 (Monday night, engineer) — the weekend outage self-healed in time; runs stop firing into the open buffer
 
 - **The Sunday logout resolved at 01:43 UTC Monday** (journal: `reconnected, down_minutes:

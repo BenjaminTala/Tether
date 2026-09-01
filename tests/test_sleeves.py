@@ -127,6 +127,25 @@ def test_core_rebalance_from_all_cash(mandate, tmp_path):
     assert by["SGOV"].side == "BUY" and by["SGOV"].usd == pytest.approx(200, abs=1)
 
 
+def test_core_rebalance_whole_shares_skips_sub_share_intent(mandate, tmp_path):
+    """2026-09-01: BUY VTI $330 with VTI at ~$375 in whole-share mode could never fill;
+    the incomplete rebalance retried every tick all session (245+ journal lines and
+    Telegram alerts per variant). A diff below one share's price must not become an intent."""
+    md = mandate.model_copy(
+        update={"broker": mandate.broker.model_copy(update={"fractional_shares": False})})
+    b = make_book(tmp_path, 10000)
+    # VTI target 60% of $5000 core = $3000; 7 sh @ 382 = $2674 -> diff $326 < 1 share ($382)
+    b.apply_fill(fill("VTI", "BUY", 7, 382), "core", entry_meta={}, counts_as_new=False)
+    b.apply_fill(fill("SGOV", "BUY", 20, 100), "core", entry_meta={}, counts_as_new=False)
+    prices = {"VTI": 382, "SGOV": 100}
+    snap = b.equity(prices, NOW)
+    intents, _ = core_rebalance(md, b, snap, prices, TODAY)
+    assert intents == []
+    # control: the same book with fractional shares enabled does emit the top-up
+    intents_frac, _ = core_rebalance(mandate, b, snap, prices, TODAY)
+    assert [i.symbol for i in intents_frac] == ["VTI"]
+
+
 def test_core_rebalance_inside_band_no_trades(mandate, tmp_path):
     b = make_book(tmp_path, 1000)
     b.apply_fill(fill("VTI", "BUY", 1, 295), "core", entry_meta={}, counts_as_new=False)

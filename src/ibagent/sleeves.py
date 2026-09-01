@@ -210,14 +210,19 @@ def core_rebalance(mandate: Mandate, book: Book, snap: EquitySnapshot,
             continue
         if in_band:                                         # only the sweep buy remains
             diff = sweep_part
+        # whole-share mode: an intent below one share's price can never fill — the holding
+        # is already as close to target as whole shares allow, so don't emit it (an emitted
+        # unfillable intent keeps the period incomplete and retries every tick all session)
+        min_amount = mandate.capital.min_order_usd if mandate.broker.fractional_shares \
+            else max(mandate.capital.min_order_usd, price)
         if diff > 0:
             amount = round(min(diff, cash_left), 2)
-            if amount >= mandate.capital.min_order_usd:
+            if amount >= min_amount:
                 cash_left -= amount
                 intents.append(RebalanceIntent(symbol, "BUY", amount,
                                                reason="core rebalance" + (" + sweep" if sweep_usd else "")))
         else:
             amount = round(min(-diff, cur_usd), 2)
-            if amount >= mandate.capital.min_order_usd:
+            if amount >= min_amount:
                 intents.append(RebalanceIntent(symbol, "SELL", amount, reason="core rebalance"))
     return intents, sweep_usd
