@@ -1,5 +1,32 @@
 # Live-session learnings
 
+## 2026-09-02 (Wednesday night, engineer) — the storm fix held; the scorer learns lesson 9
+
+- **Last night's rebalance-storm fix passed its first live day**: zero `core_rebalance`
+  retries, zero partial-retry alerts, all 7 variants made their daily (all `no_change` on
+  a recovery tape). Green day fleet-wide: main +40.76; standings improved to twin −9.87,
+  turtle −41.44, scalper −49.75, bold −52.49, sniper −69.42, swing −94.51, main −96.68.
+  bold's and swing's 3-losing-trades breakers expire 09-03; entries resume tomorrow.
+- **The scorer now applies fleet lesson 9 itself.** Today a Cramer opinion piece ("Nvidia
+  … Needs a Half Trillion Dollar Buyback") scored 0.8 (buyback+earnings keywords) and a
+  Broadcom-earnings preview ("What to watch in…") scored 0.7; with NVDA +4% both cleared
+  the gate on ALL 7 variants — 14 event runs, every one `no_change`. That is the 4th
+  preview/commentary cluster (HD ×4 + WMT, NVDA-preview 0.8 + AAPL launch 08-26, today
+  ×2) with zero trades and zero thesis changes ever. Fix: preview/commentary title
+  markers (`what to watch`, `preview`, `cramer`, `upcoming earnings`, `faces a critical
+  test`, …) halve the score — 0.8→0.4 stays in the digest (≥0.3, scheduled runs still see
+  it) but under the gate's 0.70, so it no longer burns event slots or run budget.
+  Regression test uses today's real headlines. This is a scoring-rule addition, not a
+  gate-semantics change; the per-symbol-per-day cap from 09-01 stays written-down only.
+- The two NVDA headlines cost ~half the fleet's daily event budget on a day NVDA was
+  genuinely running +4% — if real NVDA news had broken at 3pm, most variants had slots
+  left (max 3/day, 1–2 spent), but the waste pattern compounds. The dampener addresses
+  the measured cases; watch whether a preview slips the title patterns.
+- scalper: ~15 more intraday runs, all `no_change`, same null-intraday-fields blocker;
+  the RTH `day_change` probe is STILL not run (this session started 22:42 UTC again).
+  OneDrive PermissionError ×4 today (twin 14:17, bold 18:27, scalper 20:23, swing 20:26)
+  → 18+ total; the migration remains an owner decision.
+
 ## 2026-09-01 (Tuesday night, engineer) — the rebalance that could never fill alerted 245 times
 
 - **BUG (fixed): the monthly core rebalance retried an unfillable whole-share intent every

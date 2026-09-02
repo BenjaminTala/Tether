@@ -32,6 +32,19 @@ KEYWORD_WEIGHTS: Dict[str, float] = {
 }
 _COMPILED: List[Tuple[re.Pattern, float]] = [(re.compile(p, re.I), w) for p, w in KEYWORD_WEIGHTS.items()]
 
+# Preview/commentary titles describe something that WILL happen or someone's opinion of it —
+# the tradable information does not exist yet (fleet lesson 9). Measured: HD "faces a
+# critical test" x4 + WMT, NVDA earnings-preview 0.8 + AAPL launch-date (2026-08-26),
+# "What to watch in Broadcom's upcoming earnings" 0.7 and "Cramer Says Nvidia ... Needs a
+# Half Trillion Dollar Buyback" 0.8 (2026-09-02, 14 event runs fleet-wide) — every run
+# no_change. Halving keeps them in the digest (score >= 0.3) but under the event gate's
+# min_materiality (0.70), so they inform scheduled runs without burning event slots.
+PREVIEW_COMMENTARY = re.compile(
+    r"what to watch|what to expect|\bpreview\b|things to know"
+    r"|faces a (critical|key) test|upcoming (earnings|results|report)|\bcramer\b",
+    re.I,
+)
+
 # Company-name aliases for whitelist tickers (title matching; ticker itself always matches).
 SYMBOL_ALIASES: Dict[str, List[str]] = {
     "AAPL": ["apple"], "MSFT": ["microsoft"], "NVDA": ["nvidia"], "AMZN": ["amazon"],
@@ -72,6 +85,9 @@ def score_item(item: NewsItem, symbol_pats: Sequence[Tuple[str, re.Pattern]]) ->
     score = min(1.0, base + 0.1 * max(0, len(hits) - 1)) if hits else 0.0
     syms = tuple(sym for sym, pat in symbol_pats if pat.search(text))
     reasons = tuple(p.split("|")[0] for p, _ in hits[:4])
+    if score and PREVIEW_COMMENTARY.search(item.title):
+        score *= 0.5
+        reasons += ("preview/commentary: halved",)
     return ScoredItem(item=item, score=round(score, 2), symbols=syms, reasons=reasons)
 
 

@@ -59,6 +59,35 @@ def test_scoring_tags_symbols_and_weights():
     assert quiet.score == 0.0
 
 
+def test_preview_and_commentary_titles_are_dampened_below_the_gate():
+    """2026-09-02: 'Cramer Says Nvidia at 23 Times Earnings Needs a Half Trillion Dollar
+    Buyback' scored 0.8 (buyback + earnings keywords) and 'What to watch in Broadcom's
+    upcoming earnings' scored 0.7 — together 14 event runs fleet-wide, every one no_change
+    (fleet lesson 9: previews are not events). Halved scores stay in the digest but under
+    the gate's 0.70."""
+    def mk(title, link):
+        return NewsItem(id=link, source="s", title=title, link=link, summary="",
+                        published=NOW.isoformat(), fetched=NOW.isoformat())
+    previews = [
+        mk("Cramer Says Nvidia at 23 Times Earnings Needs a Half Trillion Dollar Buyback", "l1"),
+        mk("What to watch in Broadcom’s upcoming earnings – and why Nvidia is running", "l2"),
+        mk("Nvidia earnings preview: what Wall Street expects", "l3"),
+        mk("Home Depot faces a critical test on Wednesday with quarterly results due", "l4"),
+    ]
+    scored = score_items(previews, ["NVDA", "AVGO", "HD"])
+    for s in scored:
+        assert 0.3 <= s.score < 0.7, s.item.title          # digest yes, event gate no
+        assert "preview/commentary: halved" in s.reasons
+    # a real print is untouched
+    real = score_items([mk("Nvidia beats estimates, raises guidance on record data center revenue",
+                           "l5")], ["NVDA"])[0]
+    assert real.score >= 0.7 and "preview/commentary: halved" not in real.reasons
+    # and the gate does not fire on a dampened headline even with a big move
+    st = EventGateState()
+    assert check_event_gate(gate_cfg(), st, scored, {"NVDA"}, set(), {"NVDA": 0.04}, NOW) is None
+    assert st.count_today == 0
+
+
 def test_digest_sections():
     scored = score_items(items(), ["AAPL"])
     md = build_digest(scored, held={"AAPL"}, watched=set())

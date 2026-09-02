@@ -52,6 +52,9 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    and not one of them broke or built a thesis. If the headline describes something
    that WILL happen, the tradable information does not exist yet: `no_change`, and say
    in one line that it was a preview. Never position into a binary print on a preview.
+   (2026-09-02: a Cramer opinion piece and a Broadcom preview fired 14 runs fleet-wide,
+   all `no_change` — commentary counts as preview. The scorer now halves preview/
+   commentary titles, so if one still triggers you, it slipped the pattern: same rule.)
 10. **If market.json is missing rows for held positions, the tape is broken, not quiet.**
    Say so in one sentence, `no_change`, and stop — do not re-diagnose the pipeline in
    every run (scalper wrote the same lesson 13 times on 2026-08-26). The engine's stops
