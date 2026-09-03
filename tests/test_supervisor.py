@@ -468,3 +468,73 @@ def test_model_runs_wait_for_the_order_window(md, tmp_path):
     assert not sup._orders_can_fill(clock.now)
     sup.tick(clock.now)
     assert sup.state.last_intraday_ts == 0.0
+
+def _install_skills(tmp):
+    d = tmp / "skills" / "position-sizing"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("sizing", encoding="utf-8")
+    return tmp / "skills"
+
+
+def _limited():
+    return RunResult(ok=False, decision=None, error="usage/rate limited", usage_limited=True)
+
+
+def test_usage_limited_daily_rolls_forward_and_retries(env):
+    """2026-09-03: a 13:45-13:57 UTC usage-limit cluster killed 5 of 7 variants' daily runs;
+    last_daily was marked before the run, so a transient limit burned the whole day's slot
+    (main's own event run succeeded 50 min later). A usage-limited daily/weekly now gives
+    the slot back and retries after a backoff, instead of falling to HOLD for the day."""
+    m, broker, sup, clock, tmp = env
+    sup.skills_dir = _install_skills(tmp)
+    sup.state.last_weekly = "2026-08-10"                     # weekly already done this week
+    sup.runner = FakeRunner([_limited()])
+
+    clock.now = datetime(2026, 8, 12, 18, 30, tzinfo=timezone.utc)   # 14:30 ET, in window
+    sup.tick(clock.now)
+    assert sup.state.last_daily == ""                        # slot given back
+    assert sup.state.llm_retry_after_ts > clock.now.timestamp()
+    assert "llm_backoff" in [e["kind"] for e in sup.journal.tail(20)]
+
+    clock.now += timedelta(minutes=5)                        # still inside the backoff
+    sup.tick(clock.now)
+    assert sup.state.last_daily == "" and len(sup.runner.requests) == 1   # no second attempt
+
+    clock.now += timedelta(minutes=30)                       # backoff expired -> retry fires
+    sup.tick(clock.now)
+    # the retry run happened (exhausted FakeRunner = plain failure, retried once -> 2 calls)
+    assert len(sup.runner.requests) == 3
+    assert sup.state.last_daily == "2026-08-12"              # non-limited outcome marks the day
+
+
+def test_usage_limited_event_gives_the_gate_slot_back(env, monkeypatch):
+    """2026-09-03: AVGO's real earnings event fell to a usage-limited HOLD on main and
+    turtle; the fired-key made that headline unanalyzable for the rest of the day. A
+    usage-limited event run refunds the budget slot and the fired-key (cooldown stays)."""
+    import ibagent.supervisor as sv
+    from ibagent.news.scoring import EventGateState, EventTrigger
+    m, broker, sup, clock, tmp = env
+    sup.skills_dir = _install_skills(tmp)
+    sup.runner = FakeRunner([_limited()])
+    trig = EventTrigger(symbol="SPY", score=0.9, move_pct=0.03, headline="h", link="L1")
+
+    def fake_gate(cfg, state, scored, held, watched, moves, now, can_fire=True):
+        if not can_fire:
+            return None
+        state.count_today += 1
+        state.last_trigger_ts = now.timestamp()
+        state.fired_keys.append("L1")
+        return trig
+    monkeypatch.setattr(sv, "check_event_gate", fake_gate)
+
+    clock.now = datetime(2026, 8, 12, 18, 30, tzinfo=timezone.utc)   # 14:30 ET, in window
+    sup._news_job(clock.now, {})
+    gate = EventGateState.from_dict(sup.state.event_gate)
+    assert gate.count_today == 0 and "L1" not in gate.fired_keys     # refunded
+    assert gate.last_trigger_ts == clock.now.timestamp()             # cooldown untouched
+    assert sup.state.llm_retry_after_ts > clock.now.timestamp()
+
+    # while backed off, the gate is told it cannot fire at all
+    sup.state.last_news_poll_ts = 0.0
+    sup._news_job(clock.now + timedelta(minutes=5), {})
+    assert len(sup.runner.requests) == 1                             # no second model run

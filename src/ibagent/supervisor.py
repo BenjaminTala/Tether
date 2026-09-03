@@ -67,6 +67,7 @@ class ScheduleState:
     watchlist: List[str] = field(default_factory=list)
     event_gate: dict = field(default_factory=dict)
     kill_handled: bool = False
+    llm_retry_after_ts: float = 0.0      # usage-limit backoff: no model runs before this
 
     @classmethod
     def load(cls, path: Path) -> "ScheduleState":
@@ -462,12 +463,17 @@ class Supervisor:
         # of the regular session, budgeted by the same daily invocation cap as everything else.
         # Gated on the ORDER window, not bare RTH: a scan fired inside the open buffer is a
         # guaranteed "outside RTH trade window" hold (scalper 2026-08-31 09:31 ET).
+        # A Claude usage limit is transient (2026-09-03: a 13:45-13:57 UTC cluster killed
+        # 5 of 7 variants' daily runs while main's event run succeeded 50 min later).
+        # While backed off, decision runs wait instead of burning slots on guaranteed HOLDs.
+        llm_ready = now.timestamp() >= self.state.llm_retry_after_ts
+
         im = self.m.cadence.intraday_minutes
-        if im > 0 and is_trading_day(today) and self._orders_can_fill(now) \
+        if im > 0 and is_trading_day(today) and self._orders_can_fill(now) and llm_ready \
                 and now.timestamp() - self.state.last_intraday_ts >= im * 60:
             self.state.last_intraday_ts = now.timestamp()
             self.state.save(self.data_dir / "schedule_state.json")
-            self._agent_job("event", now, event_note=(
+            result = self._agent_job("event", now, event_note=(
                 "# Intraday scan — you are the fleet's DAY TRADER\n\n"
                 f"You run every {im} minutes of the session. market.json now carries TODAY'S "
                 "tape for the whole whitelist: `day_change` (vs yesterday's close), "
@@ -488,6 +494,8 @@ class Supervisor:
                 "delay + $2 round-trip.\n"
                 "A good day-trading day is 1-3 trades; zero on a dead tape is fine — but if "
                 "you end every day at zero, say in `notes_for_human` what stopped you."))
+            if self._usage_limited(result):
+                self._llm_backoff(now, "intraday")
 
         # Decision runs fire ONLY while orders can fill. A late recovery (Gateway down all
         # morning, logged in after the close - 2026-08-24) must NOT burn the run after
@@ -495,16 +503,22 @@ class Supervisor:
         can_trade_now = is_rth(now) and hhmm <= "15:30"
         weekly_due = (is_trading_day(today) and self.state.last_weekly != _monday(today)
                       and (local.weekday() > 0 or hhmm >= c.weekly_review.time))
-        if can_trade_now and weekly_due:
+        if can_trade_now and llm_ready and weekly_due:
             self.state.last_weekly = _monday(today)
             self.state.save(self.data_dir / "schedule_state.json")
-            self._agent_job("weekly", now)
+            if self._usage_limited(self._agent_job("weekly", now)):
+                self.state.last_weekly = ""          # give the slot back; retry after backoff
+                self._llm_backoff(now, "weekly")
 
-        if can_trade_now and is_trading_day(today) and hhmm >= c.daily_check.time \
+        # re-check the backoff: a usage-limited weekly above must also hold the daily
+        if can_trade_now and now.timestamp() >= self.state.llm_retry_after_ts \
+                and is_trading_day(today) and hhmm >= c.daily_check.time \
                 and self.state.last_daily != today.isoformat():
             self.state.last_daily = today.isoformat()
             self.state.save(self.data_dir / "schedule_state.json")
-            self._agent_job("daily", now)
+            if self._usage_limited(self._agent_job("daily", now)):
+                self.state.last_daily = ""           # give the slot back; retry after backoff
+                self._llm_backoff(now, "daily")
 
         # Core rebalance needs the MARKET OPEN (DAY limit orders): late morning, inside RTH.
         if is_trading_day(today) and is_rth(now) and "10:00" <= hhmm <= "15:30":
@@ -541,9 +555,12 @@ class Supervisor:
         # the open (2026-08-27). "Cannot fill" includes the open/close no-trade buffers, not
         # just closed hours: sniper's 09:34 ET event run on 2026-08-28 was a guaranteed hold.
         # The headline stays in the digest and fires at the first poll inside the window.
+        # can_fire also respects the usage-limit backoff: while Claude is rate-limited a
+        # trigger is a guaranteed HOLD, so the gate must not spend budget on it.
         trigger = check_event_gate(self.m.cadence.event, gate, self._scored_recent,
                                    held, watched, moves, now,
-                                   can_fire=self._orders_can_fill(now))
+                                   can_fire=(self._orders_can_fill(now)
+                                             and now.timestamp() >= self.state.llm_retry_after_ts))
         self.state.event_gate = gate.as_dict()
         self.state.save(self.data_dir / "schedule_state.json")
         if trigger:
@@ -551,7 +568,20 @@ class Supervisor:
                     f"day move: {trigger.move_pct:+.1%}\nheadline: {trigger.headline}\n{trigger.link}\n")
             self.journal.record("event_trigger", {"symbol": trigger.symbol, "score": trigger.score,
                                                   "move": trigger.move_pct, "headline": trigger.headline})
-            self._agent_job("event", now, event_note=note)
+            result = self._agent_job("event", now, event_note=note)
+            if self._usage_limited(result):
+                # The model never saw the headline: give back the budget slot and the
+                # fired-key so the SAME story can fire once the limit clears (2026-09-03:
+                # AVGO's real earnings event fell to a usage-limited HOLD on main and
+                # turtle, and the fired-key made it unanalyzable for the rest of the day).
+                # last_trigger_ts stays: the cooldown still spaces the re-fire.
+                gate = EventGateState.from_dict(self.state.event_gate)
+                key = trigger.link or trigger.headline
+                if key in gate.fired_keys:
+                    gate.fired_keys.remove(key)
+                    gate.count_today = max(0, gate.count_today - 1)
+                    self.state.event_gate = gate.as_dict()
+                self._llm_backoff(now, "event")
 
     def _orders_can_fill(self, now: datetime) -> bool:
         """True while an entry order submitted now can actually fill: inside RTH and outside
@@ -592,7 +622,20 @@ class Supervisor:
                 "actions": [f"{a.kind} {a.symbol} qty={a.sell_qty} stop={a.new_stop}" for a in actions],
                 "realized": report.realized_pnl, "errors": report.errors})
 
-    def _agent_job(self, run_type: str, now: datetime, event_note: str = "") -> None:
+    USAGE_LIMIT_RETRY_S = 30 * 60
+
+    def _usage_limited(self, result) -> bool:
+        return result is not None and result.held and result.reason == "usage_limited"
+
+    def _llm_backoff(self, now: datetime, run_type: str) -> None:
+        """Claude answered 'usage/rate limited': pause ALL model runs for a while instead of
+        burning further slots on guaranteed HOLDs (2026-09-03, five variants' dailies)."""
+        self.state.llm_retry_after_ts = now.timestamp() + self.USAGE_LIMIT_RETRY_S
+        self.state.save(self.data_dir / "schedule_state.json")
+        self.journal.record("llm_backoff", {
+            "run_type": run_type, "retry_after_ts": self.state.llm_retry_after_ts})
+
+    def _agent_job(self, run_type: str, now: datetime, event_note: str = ""):
         if not (self.skills_dir / "position-sizing" / "SKILL.md").is_file():
             # Skills are part of the decision contract: no skills in the bundle, no model run.
             self.journal.record("error", {"where": "agent_job",
@@ -600,7 +643,7 @@ class Supervisor:
             self.alerter.critical("run blocked: trading skills missing",
                                   f"{run_type} run refused — {self.skills_dir} lacks the skill files. "
                                   "Restore skills/ in the repo.")
-            return
+            return None
         symbols = self._symbols_for_run(run_type)
         quotes = self._quotes(symbols)
         bars = self._bars(sorted(symbols), now)
@@ -627,6 +670,7 @@ class Supervisor:
         if not result.held and result.decision.watchlist:
             self.state.watchlist = result.decision.watchlist
             self.state.save(self.data_dir / "schedule_state.json")
+        return result
 
     def _symbols_for_run(self, run_type: str) -> Set[str]:
         held = set(self.book.positions)
