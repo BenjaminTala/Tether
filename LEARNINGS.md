@@ -1,5 +1,42 @@
 # Live-session learnings
 
+## 2026-09-03 (Thursday night, engineer) — the usage limit ate five dailies; sniper finally hunts
+
+- **BUG (fixed): a transient Claude usage limit burned the day's decision slots.** A
+  13:45–13:57 UTC rate-limit cluster (all 7 variants fire their dailies + morning events
+  within the same 12 minutes — self-inflicted burst on one subscription) made 7 runs fall
+  back to HOLD, including FIVE of seven daily runs (main, scalper, sniper, swing, twin).
+  `last_daily` was marked before the run, so the limit — which cleared within ~50 min
+  (main's 14:48 event run succeeded) — cost those variants their entire daily. Same for
+  event runs: the gate's fired-key made AVGO's REAL earnings story unanalyzable all day
+  for main and turtle. Fix: a `usage_limited` HOLD now un-marks the daily/weekly slot and
+  sets a 30-min fleet-wide backoff (journaled as `llm_backoff`); a usage-limited event run
+  refunds the gate's budget slot and fired-key (cooldown still spaces the re-fire), and
+  the gate is told `can_fire=False` while backed off, so headlines wait in the digest
+  instead of burning slots on guaranteed HOLDs. Same family as 08-18/08-27: spend slots
+  only where they can buy a real decision. Regression tests both paths.
+- **A preview slipped the dampener on day one, as predicted**: "Oracle To Face Earnings
+  Test After Wild Year Riding AI Wave" (0.7) got past `faces a (critical|key) test` and
+  fired scalper at 17:13. Pattern broadened to any short "face(s) … test" phrase;
+  regression test uses the real headline.
+- **Sympathy headlines are the new slot-waster**: "Snowflake Soars 23% … Oracle Advances
+  3%" (0.75) and "HPE Earnings Top Estimates Amid Oracle AI Data Center Deal" (0.7) each
+  fired ~6 variants on ORCL — 12+ runs, every one the same "the Hard catalyst belongs to
+  another company" triage, all no_change. Distilled as fleet lesson 15; a scorer-side fix
+  (subject-vs-mention detection) is fuzzy and written down, not coded.
+- **sniper made its first event-driven entry** — NVDA 2 sh @ 228.16 (half-size trend,
+  stop 209.30, 0.46% risk) on the confirmed ~$12.9B Hugging Face acquisition (0.9). Clean
+  sizing, inside the chase gate. The news specialist finally hunted on a Hard catalyst.
+- **scalper's intraday tape POPULATED for the first time** (~17:42 UTC): day_open/
+  day_change/day_range_pos real, and the continuation playbook produced actual candidates
+  (GS +2.2%, MSFT +1.6% from open) — blocked only by its risk_off regime rule (its own
+  09-01 downgrade; upgrade needs two supportive cycles). The RTH probe question is half-
+  answered by live behavior: the refetch CAN populate intraday fields when the farm
+  cooperates. Watch whether it stays populated tomorrow.
+- swing's NVDA spec time-stop exited +5.72 as designed. Green day fleet-wide (+43 main);
+  all-time: twin +17.97 and turtle +9.71 are POSITIVE, scalper −21.83, sniper −28.61,
+  swing −33.76, main −47.82, bold −53.43. OneDrive PermissionError ×1 (main 15:20) → 19+.
+
 ## 2026-09-02 (Wednesday night, engineer) — the storm fix held; the scorer learns lesson 9
 
 - **Last night's rebalance-storm fix passed its first live day**: zero `core_rebalance`

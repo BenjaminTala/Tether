@@ -81,3 +81,10 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    kept their original stops (~214.6–214.8, 207) and are still in. One instance, but it
    is lesson 3/4 again from the other side: a fresh post-print position needs room for the
    day-2 shakeout; move to breakeven when +1R has HELD for a session, not when it first prints.
+15. **A sympathy move is not your catalyst.** On 2026-09-03 "Snowflake Soars 23% …
+   Oracle Advances 3%" and "HPE Earnings Top Estimates Amid Oracle AI Data Center Deal"
+   each fired ~6 variants on ORCL (+4–5%): 12+ runs, all no_change, all the same triage.
+   If the headline's Hard catalyst (the earnings, the deal, the guidance) belongs to a
+   DIFFERENT company and your symbol merely "advances"/"rises" alongside it, the move is
+   second-order and already priced by the time you see it: say so in one line and
+   `no_change`. Trading the sympathy name needs its OWN thesis, not a neighbor's print.
