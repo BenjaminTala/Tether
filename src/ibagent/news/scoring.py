@@ -41,7 +41,10 @@ _COMPILED: List[Tuple[re.Pattern, float]] = [(re.compile(p, re.I), w) for p, w i
 # min_materiality (0.70), so they inform scheduled runs without burning event slots.
 PREVIEW_COMMENTARY = re.compile(
     r"what to watch|what to expect|\bpreview\b|things to know"
-    r"|faces a (critical|key) test|upcoming (earnings|results|report)|\bcramer\b",
+    # 2026-09-03: "Oracle To Face Earnings Test After Wild Year Riding AI Wave" (0.7)
+    # slipped "faces a (critical|key) test" the day after this shipped — match any
+    # short "face(s) ... test" phrase; that construction is always about a FUTURE print.
+    r"|faces? [\w\s,'’-]{0,40}\btest\b|upcoming (earnings|results|report)|\bcramer\b",
     re.I,
 )
 

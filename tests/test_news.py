@@ -73,6 +73,9 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
         mk("What to watch in Broadcom’s upcoming earnings – and why Nvidia is running", "l2"),
         mk("Nvidia earnings preview: what Wall Street expects", "l3"),
         mk("Home Depot faces a critical test on Wednesday with quarterly results due", "l4"),
+        # 2026-09-03: slipped the original "faces a (critical|key) test" pattern and fired
+        # scalper at 0.7 the day after the dampener shipped.
+        mk("Oracle To Face Earnings Test After Wild Year Riding AI Wave", "l6"),
     ]
     scored = score_items(previews, ["NVDA", "AVGO", "HD"])
     for s in scored:
