@@ -76,8 +76,10 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
         # 2026-09-03: slipped the original "faces a (critical|key) test" pattern and fired
         # scalper at 0.7 the day after the dampener shipped.
         mk("Oracle To Face Earnings Test After Wild Year Riding AI Wave", "l6"),
+        # 2026-09-04: a price move "ahead of" a print fired all 7 variants on ORCL (0.7).
+        mk("Oracle Stock Climbs Ahead Of Earnings After OpenAI Astra Release", "l7"),
     ]
-    scored = score_items(previews, ["NVDA", "AVGO", "HD"])
+    scored = score_items(previews, ["NVDA", "AVGO", "HD", "ORCL"])
     for s in scored:
         assert 0.3 <= s.score < 0.7, s.item.title          # digest yes, event gate no
         assert "preview/commentary: halved" in s.reasons
@@ -85,6 +87,10 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
     real = score_items([mk("Nvidia beats estimates, raises guidance on record data center revenue",
                            "l5")], ["NVDA"])[0]
     assert real.score >= 0.7 and "preview/commentary: halved" not in real.reasons
+    # a Hard item that merely happens "ahead of earnings" keeps its score (same day, ADBE -7%)
+    hard = score_items([mk("Adobe Sinks 7% as Internal CEO Pick Lands Ahead of Earnings, "
+                           "Workday Falls 4%", "l8")], ["ADBE"])[0]
+    assert hard.score >= 0.7 and "preview/commentary: halved" not in hard.reasons
     # and the gate does not fire on a dampened headline even with a big move
     st = EventGateState()
     assert check_event_gate(gate_cfg(), st, scored, {"NVDA"}, set(), {"NVDA": 0.04}, NOW) is None

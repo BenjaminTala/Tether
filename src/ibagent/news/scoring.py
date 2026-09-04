@@ -44,7 +44,14 @@ PREVIEW_COMMENTARY = re.compile(
     # 2026-09-03: "Oracle To Face Earnings Test After Wild Year Riding AI Wave" (0.7)
     # slipped "faces a (critical|key) test" the day after this shipped — match any
     # short "face(s) ... test" phrase; that construction is always about a FUTURE print.
-    r"|faces? [\w\s,'’-]{0,40}\btest\b|upcoming (earnings|results|report)|\bcramer\b",
+    r"|faces? [\w\s,'’-]{0,40}\btest\b|upcoming (earnings|results|report)|\bcramer\b"
+    # 2026-09-04: "Oracle Stock Climbs Ahead Of Earnings After OpenAI Astra Release" (0.7)
+    # fired all 7 variants (ORCL's third preview/sympathy trigger in two sessions), every
+    # run no_change. A price move "ahead of" a print is anticipation, not information.
+    # Deliberately needs a move verb: "CEO pick lands ahead of earnings" carries a Hard
+    # item and must keep its score.
+    r"|\b(climbs?|rises?|gains?|jumps?|rallies|advances?|falls?|slips?|drops?|slides?|dips?)"
+    r" ahead of (earnings|results|the print|quarterly)",
     re.I,
 )
 
