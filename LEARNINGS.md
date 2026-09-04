@@ -40,6 +40,8 @@
   main −53.35, bold −79.45. main vs SPY since 08-24: −125. NVDA trails ratcheted to
   ~216 on main/sniper/turtle as it printed 234.6 intraday. scalper: 17 runs, 17 no_change
   — its tape stayed populated (AMD setup seen and correctly declined on a red index).
+- **DEPLOYED 22:47 UTC** via `schtasks` from Bash (PowerShell denied again tonight): all 7
+  tasks Ready → Running, heartbeats fresh within 2 s. Both fixes are live before Monday.
 
 ## 2026-09-03 (Thursday night, engineer) — the usage limit ate five dailies; sniper finally hunts
 
