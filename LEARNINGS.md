@@ -1,5 +1,46 @@
 # Live-session learnings
 
+## 2026-09-04 (Friday night, engineer) — the model invented a ticker and the engine quoted it 237 times
+
+- **BUG (fixed): a made-up watchlist entry was quoted every news poll for 22 hours.** main's
+  09-03 15:50 UTC event decision (the HPE/Oracle sympathy headline) wrote
+  `"HPE-VIA-ORCL:NONE"` into its watchlist — an annotation, not a ticker. The Decision
+  schema only upper-cases watchlist strings, `_news_job` quotes `held | watchlist` every
+  5-minute poll, and the broker answered `unknown contract` 237 times (146 today alone —
+  83% of main's warning lines) until the 13:51 daily replaced the list. Harmless to the
+  book, but a 22-hour warning stream from one line of model output, and the same string
+  would have been quoted and bar-fetched in the daily run too. Fix: when a decision's
+  watchlist is adopted, only whitelisted tickers are kept and the dropped entries are
+  journaled once (`warning where=watchlist`); the weekly prompt now says plain whitelisted
+  tickers only. Same design rule as 08-26's breaker: model text is untrusted input on the
+  data path too, not just on the order path. Regression test replays the real entry.
+- **ORCL fired all 7 variants a third time on a preview** — "Oracle Stock Climbs Ahead Of
+  Earnings After OpenAI Astra Release" (0.7, +2.4%) at 16:10–16:21 UTC; 7 runs, 7
+  `no_change`, every lesson field the same sentence ("third ORCL trigger in two sessions,
+  sympathy/preview, only the 09-10 print is Hard"). With NVDA (0.8, a day-old deal
+  explainer) and ADBE (0.8) earlier, main/bold/swing/turtle/twin were at 3/3 event slots by
+  16:15 UTC — a real 3pm headline would have found nobody home. Scorer now halves a
+  "<move verb> ahead of earnings/results" title (lesson 9's construction again);
+  deliberately requires a move verb so "CEO Pick Lands Ahead of Earnings" — a Hard item
+  that happened to be pre-print — keeps 0.8. Test uses both real headlines.
+- **The two-links-one-story pattern recurred**: ADBE's CEO pick fired scalper twice (15:12
+  "Adobe Sinks 7% as Internal CEO Pick Lands…" and 17:18 "Adobe Names New CEO As Earnings
+  Approach…", both 0.8, different links). Second instance of the 09-01 AAPL pattern; the
+  per-symbol-per-day cap stays written down, not coded — two data points, one variant.
+- **First correct Friday fleet digest fired** at 20:22 UTC (the 08-29 fix): "Week of
+  2026-08-31" shows real counts (scalper 81 decisions, main 16, sniper 24). Its lesson
+  excerpts are cut mid-word at 400 chars — cosmetic, generated output, left alone.
+- A fleet-wide `Socket disconnect` at 16:45 UTC (12:45 ET) reconnected within ~1 min on
+  all 7; sniper took a second one at 21:14. One error line each — hysteresis as designed.
+  NFLX returned no bars once on every variant (first appearance of that symbol failing).
+  OneDrive PermissionError ×2 (scalper 16:38, sniper 16:58) → 21+.
+- Soft red day (SPY −0.5%): main −10.67, bold −23.01 (XOM −1.7%, now within 3% of its
+  157.09 stop), scalper −7.18, sniper −11.42, swing +0.05, turtle −9.62, twin −7.05.
+  All-time: twin +11.17, turtle +3.95, scalper −29.10, swing −30.87, sniper −40.62,
+  main −53.35, bold −79.45. main vs SPY since 08-24: −125. NVDA trails ratcheted to
+  ~216 on main/sniper/turtle as it printed 234.6 intraday. scalper: 17 runs, 17 no_change
+  — its tape stayed populated (AMD setup seen and correctly declined on a red index).
+
 ## 2026-09-03 (Thursday night, engineer) — the usage limit ate five dailies; sniper finally hunts
 
 - **BUG (fixed): a transient Claude usage limit burned the day's decision slots.** A
