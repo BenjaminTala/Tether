@@ -97,7 +97,9 @@ market-regime, trade-management, costs-and-frictions, decision-journal, failure-
    sizing window, stop_price honoring the max stop distance, target, invalidation, horizon.
 7. Self-check (skills/failure-modes) BEFORE answering: chasing? averaging down? thesis
    unfalsifiable? overtrading? If any check fires, prefer no_change.
-8. Update `watchlist` generously (the news gate watches these for event triggers).
+8. Update `watchlist` generously (the news gate watches these for event triggers) — plain
+   whitelisted tickers from mandate_excerpt.md only; annotated or invented entries such as
+   "HPE-VIA-ORCL:NONE" are dropped.
 Reply with the decision JSON only.""",
     "daily": """\
 # Daily check + opportunity scan

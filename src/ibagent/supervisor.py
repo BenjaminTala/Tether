@@ -668,8 +668,20 @@ class Supervisor:
                            skills_dir=self.skills_dir,
                            kill_switch=Path(self.m.kill_switch.file).exists())
         if not result.held and result.decision.watchlist:
-            self.state.watchlist = result.decision.watchlist
-            self.state.save(self.data_dir / "schedule_state.json")
+            # The watchlist is untrusted model text and the engine QUOTES it every news
+            # poll: main's 2026-09-03 15:50 event decision listed "HPE-VIA-ORCL:NONE" and
+            # the broker answered "unknown contract" 237 times over the next 22 hours,
+            # until the next daily replaced the list. Keep whitelisted tickers only — the
+            # gate can only fire on those anyway.
+            universe = {i.symbol for i in self.m.universe.active.instruments}
+            kept = [w for w in result.decision.watchlist if w in universe]
+            dropped = [w for w in result.decision.watchlist if w not in universe]
+            if dropped:
+                self.journal.record("warning", {"where": "watchlist", "dropped": dropped,
+                                                "msg": "not whitelisted; ignored"})
+            if kept:
+                self.state.watchlist = kept
+                self.state.save(self.data_dir / "schedule_state.json")
         return result
 
     def _symbols_for_run(self, run_type: str) -> Set[str]:

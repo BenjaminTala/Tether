@@ -480,6 +480,34 @@ def _limited():
     return RunResult(ok=False, decision=None, error="usage/rate limited", usage_limited=True)
 
 
+def test_watchlist_keeps_only_whitelisted_tickers(env):
+    """2026-09-03 15:50 UTC: main's event decision listed "HPE-VIA-ORCL:NONE" in its
+    watchlist; the news poll quoted that non-contract every 5 minutes for 22 hours (237
+    'unknown contract' warnings) until the next daily replaced the list. The engine keeps
+    whitelisted tickers only and journals what it dropped, once."""
+    m, broker, sup, clock, tmp = env
+    sup.skills_dir = _install_skills(tmp)
+    sup.state.last_weekly = "2026-08-10"
+    sup.state.watchlist = ["JPM"]
+    decision = {"schema_version": 1, "run_type": "daily", "action": "no_change",
+                "market_regime": "neutral", "risk_multiplier": 1.0, "positions": [],
+                "stop_updates": [], "watchlist": ["HPE-VIA-ORCL:NONE", "NVDA", "ORCL"],
+                "skills_applied": ["market-regime", "failure-modes"],
+                "notes_for_human": "n", "journal_lessons": ""}
+    sup.runner = FakeRunner([RunResult(ok=True, decision=decision)])
+
+    clock.now = datetime(2026, 8, 12, 18, 30, tzinfo=timezone.utc)   # 14:30 ET, in window
+    sup.tick(clock.now)
+    assert sup.state.last_daily == "2026-08-12"
+    assert sup.state.watchlist == ["NVDA", "ORCL"]
+    warns = [e for e in sup.journal.tail(30) if e["kind"] == "warning"
+             and e["payload"].get("where") == "watchlist"]
+    assert len(warns) == 1 and warns[0]["payload"]["dropped"] == ["HPE-VIA-ORCL:NONE"]
+    # the bogus entry is never quoted: nothing outside the whitelist reaches the news job
+    sup.tick(clock.now + timedelta(minutes=5))
+    assert "HPE-VIA-ORCL:NONE" not in sup._symbols_for_run("daily")
+
+
 def test_usage_limited_daily_rolls_forward_and_retries(env):
     """2026-09-03: a 13:45-13:57 UTC usage-limit cluster killed 5 of 7 variants' daily runs;
     last_daily was marked before the run, so a transient limit burned the whole day's slot
