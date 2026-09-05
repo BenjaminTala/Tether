@@ -1,5 +1,31 @@
 # Live-session learnings
 
+## 2026-09-05 (Saturday night, engineer) — quiet weekend day; the fleet-wide disconnect moved to Saturday noon
+
+- **No session today.** Since last night's 22:47 UTC deploy the seven journals hold only:
+  the documented 20:05 ET cache fill failing its first 3 symbols per variant (22:46–22:52
+  and 00:01–00:07 UTC, `rest of pass skipped` 6–10), one stray `no historical bars` on
+  bold (GOOGL 15:02 UTC), and a **fleet-wide `Socket disconnect` at 16:45–16:49 UTC
+  (12:45 ET)** — one warning burst + one `reconnected` line per variant within ~5 min,
+  every failed symbol bracketed by `bars_recovered` on reconnect. Same clock time as
+  Friday's 12:45 ET blip, so this is now two days running at that hour; distinct from the
+  04:45 UTC nightly reset (which did NOT fire last night). Hysteresis absorbed it. Nothing
+  traded, nothing rejected, no decisions, no breakers; all 7 heartbeats fresh at 22:42 UTC;
+  `ibagent compare` unchanged from Friday's close. Last night's harness verdict is in
+  main's journal as `engineer … kept + pushed` — the first time the engineer round-trip is
+  auditable from the journal itself.
+- **Cosmetic fix: the Friday digest cuts lessons at a word boundary now.** All 14 excerpts
+  in the 09-04 FLEET.md ended mid-word ("print gets ev", "second-order s", "regardless of").
+  `_excerpt()` trims to the last whole word and appends "…"; test replays main's real ORCL
+  lesson. Not deployed — it first matters next Friday and any restart before then picks it
+  up; not worth a Saturday restart dance on its own.
+- **Tomorrow is Sunday**: the 08-30 pattern (Gateway weekly auto-restart ~12:20 UTC with
+  nobody logged in, 13 h blind, self-healed 01:43 UTC Monday) has hit 3 of 3 weekends.
+  Auto-restart/IBC remains the highest-value owner task; nothing code-side can log in.
+- The watchdog still journals nothing (08-25 follow-up open): `watchdog_state.json` is
+  `{}` again, so whether today's 5-min blip crossed its stale threshold (it should not
+  have) is unknowable after the fact. Written down, not coded — a quiet-night candidate.
+
 ## 2026-09-04 (Friday night, engineer) — the model invented a ticker and the engine quoted it 237 times
 
 - **BUG (fixed): a made-up watchlist entry was quoted every news poll for 22 hours.** main's
