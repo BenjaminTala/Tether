@@ -432,6 +432,23 @@ def test_fleet_digest_fires_friday_and_covers_the_whole_week(env, monkeypatch):
     assert text.count("Week of") == 1 == (tmp / "FLEET.md").read_text(encoding="utf-8").count("Week of")
 
 
+def test_fleet_digest_cuts_lessons_at_a_word_boundary():
+    """The first Friday digest (2026-09-04) cut all 14 lesson excerpts mid-word at 400 chars
+    ('…so the actual 09-10 print gets ev', '…second-order s'). Replays main's real lesson."""
+    from ibagent.supervisor import _excerpt
+    real = ("Third ORCL event trigger in two sessions, all pre-earnings sympathy/anticipation "
+            "headlines with no Oracle-specific datapoint. The trigger fires on price+headline, "
+            "not on information content; the correct filter remains the Hard/Soft/Noise triage "
+            "and the regime gate, both of which said hold each time. Action bias check named "
+            "and passed. Keep the watchlist ORCL entry so the actual 09-10 print gets evaluated "
+            "in the daily run with the gap price, not on a preview.")
+    assert len(real) > 400 and real[:400].endswith("gets ev")
+    out = _excerpt(real, 400)
+    assert out.endswith("print gets…") and len(out) <= 401       # whole words only, marked as cut
+    assert _excerpt("short lesson", 400) == "short lesson"          # untouched under the limit
+    assert _excerpt("x" * 500, 400) == "x" * 400 + "…"              # no space: hard cut, still marked
+
+
 def test_model_runs_wait_for_the_order_window(md, tmp_path):
     """2026-08-31: scalper's first intraday scan fired at ~09:31 ET, inside the open
     no-trade buffer; the plan was a guaranteed 'outside RTH trade window' hold — one model

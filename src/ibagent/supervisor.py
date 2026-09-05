@@ -92,6 +92,19 @@ def _monday(d: date) -> str:
     return (d - timedelta(days=d.weekday())).isoformat()
 
 
+def _excerpt(text: str, limit: int) -> str:
+    """Cut a lesson at a word boundary with an ellipsis instead of mid-word (every one of
+    the 14 excerpts in the first Friday digest, 2026-09-04, ended like 'gets ev' or
+    'second-order s')."""
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rstrip()
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:(-") + "…"
+
+
 class Supervisor:
     def __init__(self, mandate: Mandate, broker: Broker, runner: Optional[LLMRunner] = None,
                  data_dir: Path = DATA_DIR, alerter: Optional[Alerter] = None,
@@ -983,7 +996,7 @@ class Supervisor:
                                 f"- decisions {len(decisions)}, fills {len(fills)} "
                                 f"({', '.join(traded) or 'none'}), realized {realized:+,.2f} $\n")
                 for l in lessons[-2:]:
-                    sections.append(f"- lesson: {l[:400]}\n")
+                    sections.append(f"- lesson: {_excerpt(l, 400)}\n")
             with open("FLEET.md", "a", encoding="utf-8") as fh:
                 fh.write("\n".join(sections))
             self.journal.record("fleet_digest", {"week": monday})
