@@ -1,5 +1,33 @@
 # Live-session learnings
 
+## 2026-09-06 (Sunday night, engineer) — the Sunday logout hit for the 4th weekend, and healed in 4 h, not 13
+
+- **Weekend logout, 4 of 4 weekends — but the fastest recovery yet.** All 7 variants lost
+  the socket 12:21–12:25 UTC (08:21 ET, the Gateway's weekly auto-restart), each journaled
+  exactly one `connect` error at 12:27–12:31 with the new "LOGGED OUT — needs a manual
+  login" text (its second live use, correct again), and all 7 `reconnected` at 16:46–16:50
+  UTC: `down_minutes: 259, failed_attempts: 42` identical everywhere. 4 h 19 min blind
+  versus ~13 h on 08-30 and ~27 h on 08-23; whether Benjamin logged in from the phone alert
+  or the Gateway re-authenticated itself, the journal cannot tell — the outage ended at
+  12:49 ET on a Sunday either way, well before Monday's open. Hysteresis held (14–16
+  lines per variant for the whole episode, all in the first 10 minutes). Nothing traded, no
+  decisions, no breakers; all 7 heartbeats fresh at 22:40 UTC; standings unchanged from
+  Friday. swing alone took a second 30-s timeout at 21:07 UTC (the 17:00 ET reset window,
+  same as turtle-only on 08-28) and was back by 21:12.
+- **The watchdog now leaves a journal record** (08-25 follow-up, closed). Every transition
+  — `down` (with the staleness text), hourly `reminder`, `recovered` (with `since` and
+  `down_minutes`) — is appended to main's journal as a `watchdog` line, best-effort, so an
+  OneDrive lock can never suppress the alert. It runs as a fresh process every 5 min, so
+  the next Task Scheduler fire picks the change up with no restart. Same second-appender
+  pattern as `ibagent unfreeze`. Note it guards only main's heartbeat, by design.
+- **A traceback from a running process shows source text from the file on disk, not the
+  code it runs.** main's 09:36 UTC OneDrive `PermissionError` (→ 23+ total; on
+  `schedule_state.tmp → .json`, the one-shot retry did not save it) printed frames like
+  "line 234 in tick: update_high_prices" that make no sense — because supervisor.py changed
+  on 09-05 (the digest excerpt fix) after the 09-04 22:47 deploy. Cosmetic; it also
+  confirms the fleet is exactly one commit behind HEAD, and that commit first matters
+  Friday. Not restarting on a Sunday night for it.
+
 ## 2026-09-05 (Saturday night, engineer) — quiet weekend day; the fleet-wide disconnect moved to Saturday noon
 
 - **No session today.** Since last night's 22:47 UTC deploy the seven journals hold only:
