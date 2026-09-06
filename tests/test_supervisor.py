@@ -7,6 +7,7 @@ from ibagent.alerts import Alerter
 from ibagent.broker.base import Fill, OrderRequest
 from ibagent.broker.sim import SimBroker, SimConfig
 from ibagent.config import mandate_from_dict
+from ibagent.journal import Journal
 from ibagent.llm.runner import FakeRunner, RunResult
 from ibagent.supervisor import Supervisor
 from ibagent.watchdog import check as watchdog_check
@@ -190,9 +191,16 @@ def test_watchdog(env, tmp_path):
             return True
 
     a = CountingAlerter()
-    args = dict(heartbeat_path=hb, book_path=tmp / "book.json", alerter=a, state_path=st)
+    jdir = tmp / "wd-journal"
+    args = dict(heartbeat_path=hb, book_path=tmp / "book.json", alerter=a, state_path=st,
+                journal_dir=jdir)
+
+    def journaled():
+        return [(e["ts"], e["payload"]) for e in Journal(jdir).iter(kinds=("watchdog",))]
+
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args) == 0
     assert a.sent == []                                    # healthy, never-stale: silent
+    assert journaled() == []                               # ...and nothing journaled either
     # outage begins: exactly ONE critical, then silence on the 5-min rechecks
     assert watchdog_check(m, now=NOW + timedelta(minutes=30), **args) == 1
     assert watchdog_check(m, now=NOW + timedelta(minutes=35), **args) == 1
@@ -205,13 +213,31 @@ def test_watchdog(env, tmp_path):
     hb.write_text((NOW + timedelta(minutes=100)).isoformat(), encoding="utf-8")
     assert watchdog_check(m, now=NOW + timedelta(minutes=101), **args) == 0
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info"]
+    # the journal mirrors the alert sequence one-to-one (08-25: "did the watchdog fire?"
+    # was unanswerable after the fact because the state file is wiped on recovery)
+    lines = journaled()
+    assert [p["event"] for _, p in lines] == ["down", "reminder", "recovered"]
+    assert lines[0][0] == (NOW + timedelta(minutes=30)).isoformat(timespec="seconds")
+    assert "last beat 30 min ago" in lines[0][1]["problem"]
+    assert lines[1][1]["down_minutes"] == pytest.approx(65.0)
+    assert lines[2][1]["since"] == (NOW + timedelta(minutes=30)).isoformat(timespec="seconds")
+    assert lines[2][1]["down_minutes"] == pytest.approx(71.0)
     # missing heartbeat while a book exists = same episode logic
     missing = tmp / "nope.txt"
     (tmp / "book.json").write_text("{}", encoding="utf-8")
-    args2 = dict(heartbeat_path=missing, book_path=tmp / "book.json", alerter=a, state_path=st)
+    args2 = dict(heartbeat_path=missing, book_path=tmp / "book.json", alerter=a, state_path=st,
+                 journal_dir=jdir)
     assert watchdog_check(m, now=NOW, **args2) == 1
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args2) == 1
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info", "critical"]
+    assert [p["event"] for _, p in journaled()] == ["down", "reminder", "recovered", "down"]
+    # an unwritable journal (OneDrive lock) must never swallow the alert
+    st.write_text("{}", encoding="utf-8")                  # fresh episode
+    blocked = tmp / "blocked-journal"
+    blocked.write_text("not a directory", encoding="utf-8")
+    args3 = dict(args2, journal_dir=blocked)
+    assert watchdog_check(m, now=NOW + timedelta(minutes=10), **args3) == 1
+    assert [lvl for lvl, _ in a.sent][-1] == "critical"
 
 
 class _CountingAlerter(Alerter):
