@@ -1,5 +1,43 @@
 # Live-session learnings
 
+## 2026-09-07 (Labor Day, engineer) — the holiday was skipped correctly; tomorrow's roll-forward weekly would have fired into the open buffer on all 7
+
+- **No session (Labor Day) and the scheduler knew it.** `is_trading_day` covers NYSE
+  holidays: no weekly, no daily, no report, no rebalance on any variant; `last_weekly` is
+  still 08-31 everywhere, so all 7 weeklies roll forward to Tuesday morning under the 08-24
+  rule. Benjamin sent `Status` at 16:57 UTC (answered by the command path, no model run).
+  Standings unchanged since Friday; `llm_state` shows 0 runs today.
+- **BUG (fixed, deployed): the rolled-forward weekly fired on bare `is_rth`, not the order
+  window.** The 08-31 fix moved the intraday scan and the news gate to `_orders_can_fill`
+  but left `can_trade_now` for the weekly/daily on `is_rth(now)`. A rolled-forward weekly
+  therefore fires at the FIRST RTH tick, which always lands inside the 15-min open buffer.
+  The journals prove the cost: on 08-25 (the Tuesday after the lost Monday) all 7 variants'
+  weeklies planned `hold_reason: "outside RTH trade window", equity: 0.0` — seven model
+  runs wasted, and sniper (XLF), swing (SPY/XLK/XLF) and twin (GOOGL) proposed real
+  rebalances that the plan dropped (sniper and swing re-proposed in the 09:50 daily;
+  twin's GOOGL never came back). Tomorrow, 09-08, is the identical setup for all 7. The
+  daily was never affected (09:50 ≥ buffer end). One-line fix + regression test at 09:35
+  vs 09:46 ET. Third member of the "decide only where the market can act" family after
+  08-18 and 08-31 — the lesson generalizes: every `is_rth` guard on a run that produces
+  orders is a latent copy of this bug.
+- **The Gateway process itself died overnight**: `Socket disconnect` at 01:32–01:39 UTC
+  Monday → `connection refused - no Gateway process is listening` (the 08-30 text, first
+  live use of the "start it" branch) → `reconnected, down_minutes: 142–149, failed_attempts:
+  27–28` at 04:02–04:07 UTC. Second time the process vanished (08-26: 22:55→02:59 UTC);
+  both healed by ~04:00 UTC without anyone logging in, so this is the Gateway's own
+  restart cycle, not the Sunday logout. Hysteresis: one error + one summary per variant.
+- **The 12:45 ET disconnect is now 3 of the last 4 days** (09-04, 09-05, 09-07; 09-06 was
+  the logout at 08:21 ET). Today 16:46–16:54 UTC, reconnected in 5–7 min on all 7 (turtle
+  twice: 16:37 and 16:53). Nothing traded; it would matter on a day with an open event
+  slot at 12:45, so far it has not.
+- Nightly noise as documented: 20:05 ET cache fill failed its first 3 symbols per variant
+  (00:04 UTC, `rest of pass skipped` 4), `bars_recovered` on the 04:0x reconnect. One
+  OneDrive `PermissionError` on main at 09:36 UTC Sunday (→ 24+).
+- **DEPLOYED 22:44 UTC** via `schtasks` from Bash: stop → all 7 Ready → start → all 7
+  Running, heartbeats within 1 s. The fleet now runs HEAD: tonight's weekly-window fix plus
+  the 09-05 digest word-boundary fix. First live test is tomorrow 09:45 ET, when seven
+  weeklies should fire in the window instead of at 09:30.
+
 ## 2026-09-06 (Sunday night, engineer) — the Sunday logout hit for the 4th weekend, and healed in 4 h, not 13
 
 - **Weekend logout, 4 of 4 weekends — but the fastest recovery yet.** All 7 variants lost
