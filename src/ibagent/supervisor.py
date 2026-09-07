@@ -513,7 +513,12 @@ class Supervisor:
         # Decision runs fire ONLY while orders can fill. A late recovery (Gateway down all
         # morning, logged in after the close - 2026-08-24) must NOT burn the run after
         # hours: leaving last_weekly unmarked rolls it to the next trading morning instead.
-        can_trade_now = is_rth(now) and hhmm <= "15:30"
+        # The ORDER window, not bare RTH: a rolled-forward weekly fires at the first RTH
+        # tick, which always lands inside the open buffer — on 2026-08-25 (the Tuesday after
+        # the lost Monday) all 7 variants' weeklies planned "outside RTH trade window" with
+        # equity 0.0, and sniper/swing/twin lost real rebalance intents. Same after a Monday
+        # holiday (2026-09-07 Labor Day → Tuesday 09-08).
+        can_trade_now = self._orders_can_fill(now) and hhmm <= "15:30"
         weekly_due = (is_trading_day(today) and self.state.last_weekly != _monday(today)
                       and (local.weekday() > 0 or hhmm >= c.weekly_review.time))
         if can_trade_now and llm_ready and weekly_due:

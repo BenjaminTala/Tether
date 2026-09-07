@@ -148,6 +148,25 @@ def test_missed_decision_runs_do_not_fire_after_hours(env):
     assert sup.state.last_daily == "2026-08-13"
 
 
+def test_rolled_forward_weekly_waits_for_the_order_window(env):
+    """2026-08-25 (Tuesday after the lost Monday): every variant's overdue weekly fired at
+    the first RTH tick, ~09:36 ET, inside the 15-min open buffer — all 7 plans held with
+    "outside RTH trade window" (equity 0.0) and sniper/swing/twin lost real rebalance
+    intents. The same roll-forward happens after every Monday holiday (Labor Day 09-07).
+    The weekly must wait for the order window, exactly as the intraday scan does."""
+    m, broker, sup, clock, tmp = env
+    assert (m.execution.no_trade_first_minutes, m.execution.no_trade_last_minutes) == (15, 10)
+    assert sup.state.last_weekly == ""                                   # overdue (Wednesday)
+    clock.now = datetime(2026, 8, 12, 13, 35, tzinfo=timezone.utc)      # 09:35 ET: RTH, in buffer
+    sup.tick(clock.now)
+    assert sup.state.last_weekly == ""                                   # slot NOT consumed
+    assert len(sup.runner.requests) == 0                                 # no wasted model run
+    clock.now = datetime(2026, 8, 12, 13, 46, tzinfo=timezone.utc)      # 09:46 ET: window open
+    sup.tick(clock.now)
+    assert sup.state.last_weekly == "2026-08-10"                         # fires in the window
+    assert sup.state.last_daily == ""                                    # daily still waits for 09:50
+
+
 def test_weekend_runs_nothing(env):
     m, broker, sup, clock, tmp = env
     clock.now = datetime(2026, 8, 15, 15, 0, tzinfo=timezone.utc)       # Saturday
