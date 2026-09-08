@@ -92,3 +92,12 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    DIFFERENT company and your symbol merely "advances"/"rises" alongside it, the move is
    second-order and already priced by the time you see it: say so in one line and
    `no_change`. Trading the sympathy name needs its OWN thesis, not a neighbor's print.
+16. **Materiality is a headline score, not an economic one.** On 2026-09-08 "Novartis India
+   acquires Pfizer brands for $132m" carried 0.8 and fired six variants; every one fetched
+   the article and found a trademark tidy-up worth under 0.1% of Pfizer. Same day, a
+   "Before You Chase … Take a Closer Look at Its Latest Earnings Beat" commentary (0.7)
+   fired five variants on a 13-day-old CRM print. The scorer rewards verbs (acquires,
+   beat) and cannot size a deal against the company. Your first move on an M&A or
+   deal-tagged trigger is to put the dollar figure next to the market cap; under ~1% it is
+   noise regardless of the tag, and a piece that re-reads an old print is lesson 13 in
+   different clothes. One line, `no_change`, move on.

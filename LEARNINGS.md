@@ -1,5 +1,80 @@
 # Live-session learnings
 
+## 2026-09-08 (Tuesday night, engineer) — the weekly fix held on all 7; a restart had been silently disarming shadow stops since 08-25
+
+- **Last night's weekly-window fix passed its first live test.** All 7 rolled-forward
+  weeklies fired 13:48–13:51 UTC (09:48–09:51 ET, inside the order window) with real equity
+  in the plan line — on 08-25 the same setup fired at 09:30 and planned "outside RTH trade
+  window" seven times. twin used its weekly to enter XLK (6 sh @ 189.07, stop 178 → trailed
+  to 179.95), its first trend position in two weeks; turtle moved NVDA to breakeven 222.25
+  after +1R held two sessions (lesson 14 applied by the book, not against it). bold's weekly
+  hit the 1800-s model timeout (first on a weekly; scalper's 08-27 was 900 s), the retry
+  answered in 163 s and the weekly landed at 10:20 ET — one slot, 30 min, once.
+- **BUG (fixed, deployed): a fleet restart forgot every resting stop in the shadow sims.**
+  Stops are placed only on entry, on a trail tighten, or after a partial sell; the sim is
+  in-memory; `restore_sim_state` re-owned positions but NOT their stops, and the shadow.py
+  comment claiming "the protective loop re-arms them" was simply false. After last night's
+  22:44 UTC restart, scalper's SPY breakeven stop (769.46), sniper's XLF (56.98) and
+  swing's XLK (183.77) existed only in book.json — the trails had not ratcheted, so no
+  `stop_synced` fired for them this morning (the other four positions were re-armed by
+  their trails at 13:31–13:33 by luck). SPY traded through 769.46 from ~13:00 ET; the model
+  saw it twice ("broker stop should be filling, nothing for me to do"), then dropped SPY from
+  its book at 17:41 and the engine sold it at 767.32 for −6.29 — a stop-out done by hand.
+  Same exposure after every restart since 08-25 (five of them). Fix: the restore path
+  re-inserts each book stop under its own tag, unmatched until the first real quote (a
+  synthetic quote at avg_cost would fire a breakeven stop on the spot), journaled as
+  `sim_stops_restored`. Tonight's restart proves it: all 6 shadows logged their tags at
+  22:49:13, XLF and XLK included. main is unaffected — its GTC stops live at IBKR and
+  survive our restarts by themselves, which is the whole point of server-side stops (lesson 6).
+- **The null intraday tape correlates with the 12:45 ET reconnect, and the refetch was
+  blind.** Across every scalper event run since 09-01: the tape never populated on 09-01 or
+  09-02 (no midday reconnect), populated at the first run after the 16:46 UTC reconnect on
+  09-03 and 09-08, and from 14:38 on 09-04 (no reconnect; the farm was healthy at that open).
+  Today the `_bars` pass's failures (AVGO/ABBV/AMZN/CVX/MSFT/CRM) stayed dead from 13:26
+  until `bars_recovered` at 16:48–17:09, i.e. until the reconnect — history failures look
+  sticky per connection. `_refresh_bars` swallowed every exception and journaled nothing, so
+  "farm dead" vs "streak abort" vs "IB returned no partial bar" was unanswerable for a week
+  while scalper wrote "flagged again for the human" four times today. Now one `bars_refresh`
+  line per event run (fetched / today / stale / failed / skipped / unreached) and held
+  symbols are probed before the alphabet so the streak abort cannot starve the book. First
+  evidence tomorrow ~09:35 ET; if `failed` names the same symbols every run until 12:45,
+  the next step is a forced reconnect (or re-qualify) when the streak trips, not more scans.
+- **The 12:45 ET disconnect is a schedule, not IB weather.** main's reconnect log: the nightly
+  04:5x UTC blip fired 09-01, 09-02, 09-03 and never again; a 16:46–16:51 UTC reconnect
+  started 09-03 and has fired every day since — 09-05 (Sat), 09-06 (Sun), 09-07 (holiday)
+  included. IB does not reset at 12:45 ET on Saturdays. Something on this PC or in the
+  Gateway changed on 09-03; IB Gateway's own "Auto restart" time is the obvious candidate
+  (12:45 PM vs AM?). Owner check: Gateway → Configure → Lock and Exit → auto-restart time;
+  pick a time after the 17:00 ET reset and before the open. Same-hour coincidence with the
+  Sunday logout resolving at 12:49 ET on 09-06 supports it.
+- **Event gate: 23 runs fleet-wide, all no_change, five stories.** PFE "Novartis India
+  acquires Pfizer brands for $132m" (0.8) fired 6 variants — every triage said the same
+  thing: a $132m trademark sale is not material to a $150B company; the scorer weights the
+  verb "acquires", not the size. CRM "Before You Chase Salesforce's Rally, Take a Closer Look
+  at Its Latest Earnings Beat" (0.7, −4%) fired 5 — commentary on a 13-day-old print that
+  the dampener does not match ("before you …", "take a closer look"). ORCL "EU regulators
+  send early warning … ahead of earnings" (0.7) fired all 7 — fourth ORCL trigger in four
+  sessions, print is Thursday. NVDA/Qualcomm-Amazon warrants (0.8) fired 4 as a competitor
+  read-through. ADBE's "what the stock did last time" retrospective (0.65) fired sniper.
+  Candidates written down, not coded (two code changes already tonight): dampen
+  "before you …"/"take a closer look"/"here's what … did" commentary titles; and a deal-size
+  vs market-cap check is fuzzy without a cap table. Fleet lesson 16 covers the model side.
+- **scalper's first day-trade.** UNH 2 sh @ 402.22 (continuation playbook, +2.4% from open,
+  range_pos 0.92, stop 390, 1-day time stop) at 13:38 ET, once the tape was populated; the
+  SPY hand-exit minutes earlier was its 3rd active loser in a row → 3-losing-trades breaker
+  until 09-10, so its 14:40 ET TSLA proposal was rejected. Note the cosmetic false rejection
+  "UNH: entries paused" for a symbol already held at target (the +$94 top-up delta counts as
+  an entry); harmless, the model did not misread it. UNH closes 09-09 on the time stop
+  unless it works.
+- Soft red day (SPY −0.4%): main −36.84, bold +2.87, scalper −12.17, sniper −34.21, swing
+  −6.36, turtle −33.40, twin −21.76. All-time: twin −10.35, turtle −27.36, swing −34.58,
+  scalper −40.13, sniper −73.81, bold −76.02, main −87.22; main vs SPY since 08-24: −104.
+  The 12:45 ET blip reconnected in 1–2 min on all 7. OneDrive PermissionError ×4 (twin
+  13:51 + 18:28, scalper 16:48, sniper 18:42) → 28+.
+- **DEPLOYED 22:49 UTC** via `schtasks` from Bash (PowerShell denied again): stop → all 7
+  Ready → start → all 7 Running, heartbeats within 2 s, `sim_stops_restored` on all 6
+  shadows. The fleet runs HEAD.
+
 ## 2026-09-07 (Labor Day, engineer) — the holiday was skipped correctly; tomorrow's roll-forward weekly would have fired into the open buffer on all 7
 
 - **No session (Labor Day) and the scheduler knew it.** `is_trading_day` covers NYSE
