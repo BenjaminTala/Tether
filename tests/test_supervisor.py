@@ -457,6 +457,38 @@ def test_refresh_bars_is_bounded_and_skips_known_failures(env):
     assert sup._bars_cache["SPY"]                            # refreshed bars land in the cache
 
 
+def test_refresh_bars_journals_outcome_and_fetches_held_first(env):
+    """2026-09-01..09-08: scalper reported 'intraday tape null on every row' in ~60 runs and
+    nobody could say whether the refetch failed, was aborted by the streak rule, or fetched
+    bars that simply lacked today's partial bar — the loop journaled nothing. Now one line
+    per refresh says fetched/today/stale/failed/skipped/unreached, and the held book is
+    probed before the alphabet so the streak abort cannot starve it."""
+    from datetime import date
+    from ibagent.broker.base import Bar
+    m, broker, sup, clock, tmp = env
+    enter(sup, broker, "SPY", "trend", 2.0, 100.0)          # held -> must be fetched first
+    calls = []
+    yday = Bar(NOW - timedelta(days=1), 99.0, 100.0, 98.0, 99.5, 1e6)
+    today_bar = Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)
+
+    def farm(contract, days):
+        calls.append(contract.symbol)
+        if contract.symbol in ("ABBV", "ADBE", "AMD"):
+            raise RuntimeError("no historical bars")
+        if contract.symbol == "AAPL":
+            return [yday]                                   # farm answered, no partial bar yet
+        return [yday, today_bar]
+    broker.daily_bars = farm
+    fresh = sup._refresh_bars(["AMD", "ADBE", "ABBV", "AAPL", "QQQ", "SPY", "XLF"], date(2026, 8, 12))
+    assert calls[0] == "SPY"                                 # held first, alphabet second
+    assert fresh["SPY"].day_change is not None and fresh["AAPL"].day_change is None
+    line = [w for w in _journal_kinds(tmp, "broker") if w["payload"].get("event") == "bars_refresh"][-1]
+    p = line["payload"]
+    assert p["fetched"] == 2 and p["today"] == 1 and p["stale"] == ["AAPL"]
+    assert p["failed"] == ["ABBV", "ADBE", "AMD"] and p["unreached"] == 2   # QQQ, XLF never probed
+    assert "QQQ" not in calls and "XLF" not in calls
+
+
 def test_fleet_digest_fires_friday_and_covers_the_whole_week(env, monkeypatch):
     """FLEET.md 'Week of 2026-08-24' said 'decisions 0' for all 7 variants: the digest fired
     MONDAY after the close, so each 'week' held one day (and tail(60) capped the count)."""

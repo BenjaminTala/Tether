@@ -377,17 +377,35 @@ class Supervisor:
         (bundle stamped 13:32, model started 13:41) and never got a single fresh bar."""
         fresh: Dict[str, SymbolStats] = {}
         streak = 0
-        for sym in sorted(symbols):
-            if sym in self._bars_warned or streak >= BARS_FAIL_STREAK:
+        failed: List[str] = []
+        stale: List[str] = []            # fetched fine, but the last bar is not today's
+        skipped = unreached = 0
+        held = set(self.book.positions)
+        # Held positions first: the streak abort must never starve the book. Until 2026-09-08
+        # this loop was silent — 5 sessions of "intraday tape null on every row" (scalper,
+        # 14 runs/day) could not be told apart as farm failures vs IB returning no partial
+        # bar; the tape populated only after the 12:45 ET reconnect on 09-03 and 09-08.
+        for sym in sorted(symbols, key=lambda s: (s not in held, s)):
+            if sym in self._bars_warned:
+                skipped += 1
+                continue
+            if streak >= BARS_FAIL_STREAK:
+                unreached += 1
                 continue
             try:
                 self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
             except Exception:
                 streak += 1
+                failed.append(sym)
                 continue
             streak = 0
-            fresh.update(stats_table({sym: self._bars_cache[sym]},
-                                     self.m.risk.stops.atr_period, today=today_local))
+            st = stats_table({sym: self._bars_cache[sym]}, self.m.risk.stops.atr_period, today=today_local)
+            fresh.update(st)
+            if sym in st and st[sym].day_change is None:
+                stale.append(sym)
+        self.journal.record("broker", {"event": "bars_refresh", "fetched": len(fresh),
+                                       "today": len(fresh) - len(stale), "stale": stale[:12],
+                                       "failed": failed, "skipped": skipped, "unreached": unreached})
         return fresh
 
     def _reconcile(self) -> None:
