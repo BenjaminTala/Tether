@@ -99,6 +99,18 @@ class SimBroker:
         """Seed a pre-existing position (e.g. reconciliation tests)."""
         self._positions[symbol] = (qty, avg_cost)
 
+    def restore_resting(self, req: OrderRequest) -> OrderStatus:
+        """Re-insert a resting order that survived a process restart (GTC stops), WITHOUT
+        matching it: there is no quote yet, and matching against a synthetic one could fire
+        a breakeven stop on entry price. It evaluates on the first real quote push, exactly
+        like a server-side GTC stop that was sitting at the broker all along."""
+        oid = str(self._next_id)
+        self._next_id += 1
+        status = OrderStatus(broker_order_id=oid, client_tag=req.client_tag, symbol=req.symbol,
+                             side=req.side, state="submitted", qty=req.qty, ts=self._now)
+        self._orders[oid] = _Order(req=req, status=status, created=self._now)
+        return replace(status)
+
     # ------------------------------------------------------------------ Broker protocol
     def connect(self) -> None:
         self._connected = True

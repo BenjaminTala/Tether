@@ -20,19 +20,36 @@ from ibagent.broker.base import (AccountSnapshot, Bar, Contract, Fill, OrderRequ
 from ibagent.broker.sim import SimBroker
 
 
-def restore_sim_state(sim: SimBroker, book, ledger_net: float) -> None:
+def restore_sim_state(sim: SimBroker, book, ledger_net: float,
+                      stop_type: str = "STP", stop_limit_offset_pct: float = 0.01) -> List[str]:
     """Rebuild the in-memory simulator from the persisted book after a restart.
 
     The sim starts with cash = the book's pot cash plus any ledger contributions the
     supervisor's capital sync is about to apply, and re-owns every book position at its
     average cost — otherwise the first reconcile after a restart would see the shares
-    missing and freeze the shadow. (Resting GTC stops are re-armed by the supervisor's
-    protective loop on its first RTH pass.)"""
+    missing and freeze the shadow.
+
+    Resting GTC stops are re-armed here too, under the book's own stop tag. Nothing else
+    does: the engine places a stop only on entry, on a trail tighten, or after a partial
+    sell, so a position whose trail did not ratchet ran UNPROTECTED in the sim after every
+    fleet restart. 2026-09-08: scalper's SPY breakeven stop (769.46) was crossed at ~13:00 ET
+    and never filled; sniper's XLF and swing's XLK sat stop-less all session. At the real
+    broker the GTC stop survives a restart by itself — this restores the same semantics.
+    Returns the tags re-armed."""
     pending_contrib = ledger_net - book.net_contributions
     cash = book.pot_cash + max(0.0, pending_contrib)
     sim._total_cash = sim._settled_cash = round(max(cash, 0.0), 2)
+    armed: List[str] = []
     for pos in book.positions.values():
         sim.force_position(pos.symbol, pos.qty, pos.avg_cost)
+        if pos.qty > 0 and pos.stop_price and pos.stop_order_tag:
+            stop = round(float(pos.stop_price), 2)
+            limit = round(stop * (1 - stop_limit_offset_pct), 2) if stop_type == "STP LMT" else None
+            sim.restore_resting(OrderRequest(client_tag=pos.stop_order_tag, symbol=pos.symbol,
+                                             side="SELL", qty=pos.qty, order_type=stop_type,
+                                             stop_price=stop, limit_price=limit, tif="GTC"))
+            armed.append(pos.stop_order_tag)
+    return armed
 
 
 class ShadowBroker:

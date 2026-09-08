@@ -74,6 +74,44 @@ def test_gtc_stop_fires_on_fresh_quote():
     assert len(fills) == 1 and fills[0].price <= 95.0
 
 
+def test_restart_rearms_resting_stops_from_the_book(tmp_path):
+    """2026-09-08: after the 22:44 UTC fleet restart, scalper's SPY breakeven stop (769.46),
+    sniper's XLF and swing's XLK stops existed only in book.json — the in-memory sim had
+    forgotten them and nothing re-placed a stop whose trail did not ratchet. SPY traded
+    through 769.46 from ~13:00 ET and never filled. A restart must restore every resting
+    stop under its book tag, unmatched until the first REAL quote arrives."""
+    from ibagent.book import Book
+    from ibagent.broker.base import Fill
+    from ibagent.broker.shadow import restore_sim_state
+    book = Book(tmp_path / "book.json")
+    book.apply_contribution(10_000.0)
+    book.apply_fill(Fill("1", "e-SPY", "SPY", "BUY", 2.0, 769.46, 1.0, NOW), "trend",
+                    entry_meta={"stop_price": 769.46, "stop_order_tag": "s-SPY-STP2"})
+    book.apply_fill(Fill("2", "e-XLF", "XLF", "BUY", 17.0, 58.15, 1.0, NOW), "trend",
+                    entry_meta={"stop_price": 56.98, "stop_order_tag": "s-XLF-STP7"})
+    book.apply_fill(Fill("3", "e-VTI", "VTI", "BUY", 1.0, 380.0, 1.0, NOW), "core", entry_meta={})
+    data, sim, sb, clock = make_shadow(cash=0.0)
+    armed = restore_sim_state(sim, book, 10_000.0)
+    assert sorted(armed) == ["s-SPY-STP2", "s-XLF-STP7"]     # core holds no stop
+    assert sorted(o.client_tag for o in sb.open_orders()) == ["s-SPY-STP2", "s-XLF-STP7"]
+    assert sb.fills_since(NOW) == []                          # nothing fired without a quote
+
+    clock["now"] = NOW + timedelta(minutes=1)
+    data.quotes["SPY"] = make_quote("SPY", 770.19, ts=clock["now"])    # above the stop: rests
+    data.quotes["XLF"] = make_quote("XLF", 58.10, ts=clock["now"])
+    sb.quote(Contract(symbol="SPY")); sb.quote(Contract(symbol="XLF"))
+    assert sb.fills_since(NOW) == []
+
+    clock["now"] = NOW + timedelta(hours=3)
+    data.quotes["SPY"] = make_quote("SPY", 767.28, ts=clock["now"])    # the 13:08 ET print
+    sb.quote(Contract(symbol="SPY"))
+    fills = sb.fills_since(NOW)
+    assert [f.client_tag for f in fills] == ["s-SPY-STP2"]    # the engine's fill sync keys on this tag
+    assert fills[0].qty == 2.0 and fills[0].price <= 769.46
+    assert [o.client_tag for o in sb.open_orders()] == ["s-XLF-STP7"]
+    assert sb.positions() == [p for p in sb.positions() if p.symbol != "SPY"]
+
+
 def test_shadow_variant_configs_load():
     for spec_path in sorted((REPO / "shadows").glob("*.yaml")):
         spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))

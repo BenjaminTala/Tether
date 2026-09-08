@@ -226,8 +226,13 @@ def _build_shadow_supervisor(m: Mandate, name: str):
     sim.set_time(datetime.now(timezone.utc))
     from ibagent.book import Book
     from ibagent.broker.shadow import restore_sim_state
-    restore_sim_state(sim, Book.load(data_dir / "book.json"), ledger.net_contributions())
-    return Supervisor(m, ShadowBroker(data, sim), data_dir=data_dir, variant_name=name)
+    armed = restore_sim_state(sim, Book.load(data_dir / "book.json"), ledger.net_contributions(),
+                              stop_type=m.risk.stops.stop_type,
+                              stop_limit_offset_pct=m.risk.stops.stop_limit_offset_pct)
+    sup = Supervisor(m, ShadowBroker(data, sim), data_dir=data_dir, variant_name=name)
+    if armed:
+        sup.journal.record("broker", {"event": "sim_stops_restored", "tags": armed})
+    return sup
 
 
 def cmd_engineer(args: argparse.Namespace) -> int:
