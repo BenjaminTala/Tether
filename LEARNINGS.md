@@ -1,5 +1,58 @@
 # Live-session learnings
 
+## 2026-09-10 (Thursday night, engineer) — a full session back; the intraday tape fills at ~10:00 ET on its own; the same three headline shapes cost 20 runs
+
+- **The fleet ran the whole session** after Tuesday's dark day: all 7 dailies at 13:51–13:54
+  UTC, all 7 heartbeats fresh at 22:37–22:40 UTC, every decision `no_change` except
+  scalper's three entry proposals (XOM 13:54, TSLA 15:09, AAPL 15:41 UTC), each rejected by
+  its 4-loser cooldown (to 09-14). The model then wrote "0/0 fills with no cause visible to
+  me" in six consecutive runs — `paused_sleeves` IS in portfolio.json, it just did not look.
+  Written down, not coded: the day's `rejection` lines could be surfaced in the bundle
+  verbatim so a refused entry reads as "refused: cooldown" instead of "expired?".
+- **The `bars_refresh` line answered the null-tape question on day one.** scalper's first two
+  event runs (13:39 and 13:45 UTC) logged `today: 0, stale: 12, failed: []`; from 14:08 UTC
+  (10:08 ET) onward every run logged `today: N == fetched`, `failed: []`, all day — with NO
+  reconnect in between. So the refetch works and the farm was healthy; IB simply does not
+  serve today's partial daily bar in the first ~30–40 min of the session. The 09-08 "tape
+  populates only after the 12:45 reconnect" reading was a coincidence of the days sampled.
+  Design consequence: the continuation playbook is blind by construction until ~10:05 ET,
+  which is inside its own "avoid first-30-min whipsaw" rule anyway. Nothing to fix; the
+  first two scans of the day are the cost of knowing that.
+- **The 12:45 ET disconnect fired again on all 7** (16:45–16:46 UTC, back in ~1 min; main
+  took it as a `tick` error inside `sync_external_fills`, one line). The 17:00 ET reset hit
+  scalper/sniper/turtle at 21:08 UTC (back 21:13), twin had a lone 30-s timeout at 12:19 UTC.
+  All hysteresis-quiet. Owner check on the Gateway auto-restart time still stands.
+- **Fix (owner's open item from this morning): the first report after an unwatched session
+  now leads with the outage.** The 02:00 UTC report for Tue 09-09 read "P&L today: −18.62 $"
+  because `day_start_equity` was anchored at the 01:57 restart. The protective job runs
+  every 15 min of RTH and its timestamp is persisted, so "no protective check since before
+  today's open" = nobody watched the session (PC off, supervisor dead, or Gateway
+  unreachable all day as on 08-24). The report now opens with `⚠️ MISSED Tue Sep 09
+  ENTIRELY … last check Mon Sep 08 15:5x EDT … 'P&L today' is measured from the restart`.
+  Fresh installs (no check ever) are exempt; partial-day outages are left to the connect
+  alerts. Regression test replays the 22:00 ET report.
+- **Fix: four more preview/roundup title shapes are halved.** Today's 23 event runs
+  fleet-wide were all `no_change`, and 18 of them came from three items: "Oracle options are
+  doing something curious heading into earnings" (0.7, all 7), CNBC's daily "… and more in
+  Morning Squawk" roundup (0.8 on AAPL +2%, all 7 — it publishes every morning and names
+  whatever moved), and "… Oracle Eases Into Earnings …" (scalper). With 09-08's "Before You
+  Chase … Take a Closer Look at Its Latest Earnings Beat" (5 runs) that is 20 runs on four
+  shapes, 20 no_change. Patterns: "<heading|eases|…> into earnings", "morning squawk",
+  "before you chase/buy", "take a closer look". Deliberately NOT dampened: "Oracle Reports
+  Earnings as It Transforms Itself…" (present-tense "reports" is also how the real print is
+  headlined, and ORCL prints tonight) and the TSLA/SpaceX merger-speculation feature
+  ("What It May Mean…", 4 runs) — "may mean" is too generic a hook. Test pins the four real
+  headlines plus two ORCL print/reaction controls that must keep 0.7+.
+- fleet-lessons housekeeping: this morning's owner session and the 09-08 engineer entry had
+  both written a lesson 16 (materiality vs market cap); merged into one, numbering 16–18
+  is clean again.
+- Red day (SPY −0.7%, NVDA −2.4%): main −43.43 (all-time −148.74, −68.84 vs SPY). All-time:
+  scalper −54.91, twin −56.38, bold −61.86, swing −75.77, turtle −83.20, sniper −122.67,
+  main −148.74. Realized today: sniper XLF stop −22.45, turtle NVDA breakeven −2.06,
+  scalper UNH time-stop −13.84. OneDrive PermissionError ×3 (sniper 11:26, twin 14:31 and
+  15:51 UTC) → 31+. ORCL prints after tonight's close; every variant has it flagged for
+  tomorrow's daily per lesson 12 — tomorrow's reaction headlines are NOT dampened.
+
 ## 2026-09-10 (owner session) — the fleet was dark the whole of Tue Sep 9; loss-streak cooldown proven in the engine; a $132M headline scored like a $13B one
 
 - **Sep 9 was a full-fleet outage and nobody was told.** Journals (main AND all 6 shadows)

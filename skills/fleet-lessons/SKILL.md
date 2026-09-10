@@ -97,12 +97,16 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    DIFFERENT company and your symbol merely "advances"/"rises" alongside it, the move is
    second-order and already priced by the time you see it: say so in one line and
    `no_change`. Trading the sympathy name needs its OWN thesis, not a neighbor's print.
-16. **A dollar figure is only Hard relative to the company's size.** "Novartis India
-   acquires Pfizer brands for $132m" scored 0.8 materiality (M&A pattern) on 2026-09-08;
-   $132M is ~0.05% of PFE's market cap — an India-trademark housekeeping sale, not a
-   thesis event. Before treating an acquisition/divestiture/contract headline as Hard,
-   divide its dollar figure by the company's market cap: under ~0.5%, triage it as Noise
-   in one line and `no_change`, whatever the scorer said.
+16. **Materiality is a headline score, not an economic one — a dollar figure is only Hard
+   relative to the company's size.** "Novartis India acquires Pfizer brands for $132m"
+   scored 0.8 (M&A pattern) on 2026-09-08 and fired six variants; every one fetched the
+   article and found an India-trademark tidy-up worth ~0.05% of PFE's market cap. Same
+   day, "Before You Chase … Take a Closer Look at Its Latest Earnings Beat" (0.7) fired
+   five variants on a 13-day-old CRM print. The scorer rewards verbs (acquires, beat) and
+   cannot size a deal against the company. Before treating an acquisition/divestiture/
+   contract headline as Hard, put the dollar figure next to the market cap: under ~0.5–1%
+   it is Noise whatever the tag; a piece that re-reads an old print is lesson 13 in
+   different clothes. One line, `no_change`, move on.
 17. **No-catalyst intraday entries are a proven loser on this tape.** scalper's four
    straight losses (through 2026-09-10: SPY breakeven day-2 tag, UNH midday knife-catch
    time-stopped −$13.84, plus two prior) all shared one shape: entry justified by price
@@ -116,12 +120,3 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    defence — lesson 6). If the bundle shows a gap spanning a trading session: reconcile
    and re-check stops first, evaluate the book at TODAY's gap prices per lesson 12, and
    ignore the missed day's headlines — by lesson 7 a day-old catalyst is already untradable.
-16. **Materiality is a headline score, not an economic one.** On 2026-09-08 "Novartis India
-   acquires Pfizer brands for $132m" carried 0.8 and fired six variants; every one fetched
-   the article and found a trademark tidy-up worth under 0.1% of Pfizer. Same day, a
-   "Before You Chase … Take a Closer Look at Its Latest Earnings Beat" commentary (0.7)
-   fired five variants on a 13-day-old CRM print. The scorer rewards verbs (acquires,
-   beat) and cannot size a deal against the company. Your first move on an M&A or
-   deal-tagged trigger is to put the dollar figure next to the market cap; under ~1% it is
-   noise regardless of the tag, and a piece that re-reads an old print is lesson 13 in
-   different clothes. One line, `no_change`, move on.
