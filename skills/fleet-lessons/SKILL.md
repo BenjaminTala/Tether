@@ -85,6 +85,11 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    kept their original stops (~214.6–214.8, 207) and are still in. One instance, but it
    is lesson 3/4 again from the other side: a fresh post-print position needs room for the
    day-2 shakeout; move to breakeven when +1R has HELD for a session, not when it first prints.
+   (2026-09-10 addendum: turtle followed this rule exactly — breakeven 222.25 only after +1R
+   held two sessions — and a routine −0.5% morning dip still tagged it for −$2 while
+   original-stop holders stayed in. Breakeven is a free exit option and the first shakeout
+   WILL exercise it: move to breakeven only when you accept "flat and out" as the outcome;
+   if you still want the position, trail below structure instead.)
 15. **A sympathy move is not your catalyst.** On 2026-09-03 "Snowflake Soars 23% …
    Oracle Advances 3%" and "HPE Earnings Top Estimates Amid Oracle AI Data Center Deal"
    each fired ~6 variants on ORCL (+4–5%): 12+ runs, all no_change, all the same triage.
@@ -92,6 +97,25 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    DIFFERENT company and your symbol merely "advances"/"rises" alongside it, the move is
    second-order and already priced by the time you see it: say so in one line and
    `no_change`. Trading the sympathy name needs its OWN thesis, not a neighbor's print.
+16. **A dollar figure is only Hard relative to the company's size.** "Novartis India
+   acquires Pfizer brands for $132m" scored 0.8 materiality (M&A pattern) on 2026-09-08;
+   $132M is ~0.05% of PFE's market cap — an India-trademark housekeeping sale, not a
+   thesis event. Before treating an acquisition/divestiture/contract headline as Hard,
+   divide its dollar figure by the company's market cap: under ~0.5%, triage it as Noise
+   in one line and `no_change`, whatever the scorer said.
+17. **No-catalyst intraday entries are a proven loser on this tape.** scalper's four
+   straight losses (through 2026-09-10: SPY breakeven day-2 tag, UNH midday knife-catch
+   time-stopped −$13.84, plus two prior) all shared one shape: entry justified by price
+   geometry alone (range position, "oversold intraday") with no catalyst. That is lesson 1
+   at a faster clock — and the fee drag of lesson 2 compounds it. The engine's loss-streak
+   cooldown is real and WILL reject your entries (it refused scalper's TSLA and XOM
+   proposals mid-cooldown); when it does, the correct response is to stand down and write
+   what broke, not to re-propose around it.
+18. **After a dark day, the first run back is a fresh daily, not a catch-up.** The whole
+   fleet was off for all of 2026-09-09 (PC off; GTC stops at IBKR were the only live
+   defence — lesson 6). If the bundle shows a gap spanning a trading session: reconcile
+   and re-check stops first, evaluate the book at TODAY's gap prices per lesson 12, and
+   ignore the missed day's headlines — by lesson 7 a day-old catalyst is already untradable.
 16. **Materiality is a headline score, not an economic one.** On 2026-09-08 "Novartis India
    acquires Pfizer brands for $132m" carried 0.8 and fired six variants; every one fetched
    the article and found a trademark tidy-up worth under 0.1% of Pfizer. Same day, a

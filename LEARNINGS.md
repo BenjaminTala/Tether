@@ -1,5 +1,53 @@
 # Live-session learnings
 
+## 2026-09-10 (owner session) — the fleet was dark the whole of Tue Sep 9; loss-streak cooldown proven in the engine; a $132M headline scored like a $13B one
+
+- **Sep 9 was a full-fleet outage and nobody was told.** Journals (main AND all 6 shadows)
+  are empty from 09-08 22:55 UTC (engineer) to 09-10 01:51 UTC — the PC was off/asleep for
+  ~27 h spanning an entire trading session. The 01:51 entry is `connect: connection refused;
+  IB Gateway needs to be started`; Gateway came up at 01:57 and the (late) EOD report went
+  out 02:00. No watchdog alert fired because the watchdog sleeps with the PC — by design it
+  can only catch a dead supervisor on a live machine, and there is no code fix for a machine
+  that is off. What held: main's GTC stops live at IBKR and were armed the whole day
+  (lesson 6 is the whole defence in this scenario). What did NOT hold: shadow sim stops
+  cannot fire while the process is down — accepted for sim money, unacceptable shape for
+  live. Consequences: (a) the missed-day case must be LOUD — first report after a gap that
+  spans a trading session should lead with "MISSED Tue Sep 9 entirely (PC off)", not
+  present a normal-looking P&L line; *open: engineer adds a journal-gap banner to the first
+  daily report after an outage.* (b) For live money the PC-off failure mode argues for an
+  always-on host or at minimum BIOS auto-power-on + scheduled wake. *Open: Benjamin decides
+  before go-live; this is now on the go-live checklist in spirit even though the gate can't
+  measure it.*
+- **The loss-streak breaker passed its first live test, twice.** scalper hit 3 losers in a
+  row on 09-08 (cooldown to 09-10), proposed a TSLA add anyway — engine refused. Hit its
+  4th on 09-10 (UNH time-stop −13.84, cooldown to 09-14), proposed XOM in the daily —
+  `rejection: entries paused until 2026-09-14: 4 losing trades in a row (cooldown)`. The
+  model keeps trying to trade through its own cooldown; the engine is what actually stops
+  it. That is the architecture working exactly as designed — and evidence the scalper
+  mandate itself ("buy and sell all the time") is fee-and-whipsaw drag, consistent with the
+  backtest (fleet lesson 3): its four losers were all no-catalyst intraday entries.
+- **Materiality scoring has no denominator.** "Novartis India acquires Pfizer brands for
+  $132m" scored 0.8 (Hard M&A pattern) and fired an event run; the fetch showed it was an
+  India-trademark sale ~0.05% of PFE's market cap. Model triaged it correctly (no_change) —
+  but the gate spent a run on it. Skill now says: divide the headline's dollar figure by
+  market cap before calling it Hard (fleet lesson 16). *Open (nice-to-have): scorer could
+  damp "$Nm" figures that are tiny vs a cached mega-cap list.*
+- **turtle's by-the-book breakeven still got tagged.** Moved NVDA to breakeven 222.25 on
+  09-08 only after +1R had held two sessions (lesson 14's own rule) and was stopped 09-10
+  on a routine −0.5% morning dip for −$2.06, while main/swing sit in the same name on
+  original stops. Not a mistake — flat exit, capital intact — but the honest framing is:
+  breakeven converts the position into a free exit option and the first shakeout WILL
+  exercise it. Evidence appended to lesson 14.
+- **twin paid 0.95% of slippage to a stale plan price**: XLK planned at 187.28 (Mon-night
+  quote), filled 189.07 at Tuesday's open inside the ask+35bps collar. The collar did its
+  job (it filled; LLY never did), but morning gap risk on overnight-planned entries is
+  ~1% on an ETF — size and stop math should use the fill, not the plan (they do; noted so
+  nobody "optimizes" the collar tighter and reintroduces the LLY failure).
+- Housekeeping observed: sniper's XLF GTC-style sim stop fired (−22.45) and NVDA/XLF exits
+  journaled cleanly; main dropped risk multiplier 0.8 → 0.6 on the softer tape (VIX 17.7,
+  SPY under ma20) — defensive posture, no action needed. ORCL prints tonight (09-10 AMC);
+  the whole fleet has it flagged for tomorrow's daily per lesson 12.
+
 ## 2026-09-08 (Tuesday night, engineer) — the weekly fix held on all 7; a restart had been silently disarming shadow stops since 08-25
 
 - **Last night's weekly-window fix passed its first live test.** All 7 rolled-forward
