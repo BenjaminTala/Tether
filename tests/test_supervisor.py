@@ -127,12 +127,33 @@ def test_daily_report_and_schedule_marks(env):
     clock.now = datetime(2026, 8, 12, 20, 30, tzinfo=timezone.utc)      # 16:30 ET, after close
     sup.tick(clock.now)
     assert sup.state.last_report == "2026-08-12"
-    kinds = [e["kind"] for e in sup.journal.tail(80)]
-    assert "daily_report" in kinds
+    reports = [e for e in sup.journal.tail(80) if e["kind"] == "daily_report"]
+    assert reports and "MISSED" not in reports[-1]["payload"]["text"]   # session was watched
     # second tick the same day does not repeat the jobs
     sup.tick(clock.now + timedelta(minutes=5))
     kinds2 = [e["kind"] for e in sup.journal.tail(200)]
     assert kinds2.count("daily_report") == 1
+
+
+def test_report_after_an_unwatched_session_leads_with_the_outage(env):
+    """2026-09-09: the PC was off for the whole session; the late report at 22:00 ET said
+    'P&L today: -18.62 $' as if it had been an ordinary day. The first report after a gap
+    that spans a trading session must lead with MISSED, not with a normal-looking P&L."""
+    m, broker, sup, clock, tmp = env
+    # last protective check: the previous session's afternoon (Tue 08-11 15:45 ET)
+    sup.state.last_protective_ts = datetime(2026, 8, 11, 19, 45, tzinfo=timezone.utc).timestamp()
+    clock.now = datetime(2026, 8, 13, 2, 0, tzinfo=timezone.utc)        # Wed 08-12 22:00 ET
+    sup.tick(clock.now)
+    assert sup.state.last_report == "2026-08-12"
+    text = [e for e in sup.journal.tail(80) if e["kind"] == "daily_report"][-1]["payload"]["text"]
+    assert text.startswith("⚠️ MISSED Wed Aug 12 ENTIRELY")
+    assert "last check Tue Aug 11 15:45" in text
+    # a fresh install (no protective check ever) is not an outage
+    sup.state.last_protective_ts = 0.0
+    sup.state.last_report = ""
+    sup.tick(clock.now)
+    text = [e for e in sup.journal.tail(80) if e["kind"] == "daily_report"][-1]["payload"]["text"]
+    assert "MISSED" not in text
 
 
 def test_missed_decision_runs_do_not_fire_after_hours(env):

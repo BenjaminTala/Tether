@@ -35,7 +35,7 @@ from ibagent.execution import Executor
 from ibagent.journal import Journal
 from ibagent.llm.runner import ClaudeCodeRunner, LLMRunner
 from ibagent.marketclock import (in_no_trade_window, is_rth, is_trading_day,
-                                 previous_trading_day, utc)
+                                 previous_trading_day, session, utc)
 from ibagent.news.ingest import DEFAULT_FEEDS, NewsStore, poll as news_poll
 from ibagent.news.scoring import (EventGateState, build_digest, check_event_gate, score_items)
 from ibagent.schemas import decision_json_schema_text
@@ -895,9 +895,12 @@ class Supervisor:
         since_pct = since_start / self.book.net_contributions if self.book.net_contributions > 0 else 0.0
         fees_today, realized_today = self._fees_and_realized_today(now)
         mood = "📈" if day_pnl >= 0 else "📉"
+        missed = self._missed_session_banner(now)
+        if missed:
+            mood = "⚠️"
 
         # ---- plain-language summary first -------------------------------------------------
-        lines = [
+        lines = ([missed, ""] if missed else []) + [
             f"P&L today:     {day_pnl:+,.2f} $ ({day_pct:+.2%})",
             f"  before fees: {day_pnl + fees_today:+,.2f} $   (fees paid today: {fees_today:,.2f} $)",
             f"P&L all-time:  {since_start:+,.2f} $ ({since_pct:+.2%}) on "
@@ -968,6 +971,27 @@ class Supervisor:
         self.alerter.info(f"{mood} Daily report — {now.astimezone(self.tz):%a %b %d}", body)
         if self.variant_name == "main":
             self._maybe_fleet_digest(now)
+
+    def _missed_session_banner(self, now: datetime) -> Optional[str]:
+        """Lead the report with the outage when nobody watched today's session.
+
+        2026-09-09: the PC was off/asleep for ~27 h across the whole session (every journal
+        empty 09-08 22:55 → 09-10 01:51 UTC); the late report at 22:00 ET then read like an
+        ordinary day ("P&L today: -18.62 $") because day_start_equity had been anchored at
+        the restart. The protective job is the engine's own attendance record: it runs every
+        15 min of RTH on a trading day and its timestamp is persisted, so "no protective check
+        since before today's open" means the session went unwatched — PC off, supervisor dead,
+        or Gateway unreachable all day (2026-08-24). A fresh install (no check ever) is not an
+        outage. Partial-day outages are not flagged here; the connect alerts cover them."""
+        last = self.state.last_protective_ts
+        local = now.astimezone(self.tz)
+        sess = session(local.date())
+        if not last or sess is None or last >= sess[0].timestamp():
+            return None
+        since = datetime.fromtimestamp(last, tz=timezone.utc).astimezone(self.tz)
+        return (f"⚠️ MISSED {local:%a %b %d} ENTIRELY: the engine did not watch today's session "
+                f"(last check {since:%a %b %d %H:%M} {since:%Z}). Only stops resting at the "
+                "broker could act. 'P&L today' below is measured from the restart, not the open.")
 
     def _fleet_lines(self) -> List[str]:
         """One line per shadow variant, marked with the main broker's live quotes."""
