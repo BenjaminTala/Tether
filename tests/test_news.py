@@ -78,8 +78,17 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
         mk("Oracle To Face Earnings Test After Wild Year Riding AI Wave", "l6"),
         # 2026-09-04: a price move "ahead of" a print fired all 7 variants on ORCL (0.7).
         mk("Oracle Stock Climbs Ahead Of Earnings After OpenAI Astra Release", "l7"),
+        # 2026-09-10: "into earnings" fired all 7 (ORCL) + scalper; CNBC's daily roundup fired
+        # all 7 on AAPL; 2026-09-08: a "before you chase" re-read of an old print fired five.
+        mk("Oracle options are doing something curious heading into earnings", "l9"),
+        mk("CoreWeave Sinks 5% Despite Burry Pulling In His AI Short, Oracle Eases Into "
+           "Earnings, Cloudflare Holds Steady", "l10"),
+        mk("Apple's foldable phone, Macy's earnings, Treasury buybacks and more in Morning "
+           "Squawk", "l11"),
+        mk("Before You Chase Salesforce's Rally, Take a Closer Look at Its Latest Earnings "
+           "Beat", "l12"),
     ]
-    scored = score_items(previews, ["NVDA", "AVGO", "HD", "ORCL"])
+    scored = score_items(previews, ["NVDA", "AVGO", "HD", "ORCL", "AAPL", "CRM"])
     for s in scored:
         assert 0.3 <= s.score < 0.7, s.item.title          # digest yes, event gate no
         assert "preview/commentary: halved" in s.reasons
@@ -91,6 +100,11 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
     hard = score_items([mk("Adobe Sinks 7% as Internal CEO Pick Lands Ahead of Earnings, "
                            "Workday Falls 4%", "l8")], ["ADBE"])[0]
     assert hard.score >= 0.7 and "preview/commentary: halved" not in hard.reasons
+    # the print itself, and its reaction, keep their score (tomorrow's ORCL headlines)
+    for title in ("Oracle Reports Earnings as It Transforms Itself for the AI Age",
+                  "Oracle shares jump 8% after earnings beat and raised cloud guidance"):
+        real = score_items([mk(title, "l13")], ["ORCL"])[0]
+        assert real.score >= 0.7 and "preview/commentary: halved" not in real.reasons, title
     # and the gate does not fire on a dampened headline even with a big move
     st = EventGateState()
     assert check_event_gate(gate_cfg(), st, scored, {"NVDA"}, set(), {"NVDA": 0.04}, NOW) is None

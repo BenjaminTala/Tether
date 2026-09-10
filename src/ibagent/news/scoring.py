@@ -51,7 +51,17 @@ PREVIEW_COMMENTARY = re.compile(
     # Deliberately needs a move verb: "CEO pick lands ahead of earnings" carries a Hard
     # item and must keep its score.
     r"|\b(climbs?|rises?|gains?|jumps?|rallies|advances?|falls?|slips?|drops?|slides?|dips?)"
-    r" ahead of (earnings|results|the print|quarterly)",
+    r" ahead of (earnings|results|the print|quarterly)"
+    # 2026-09-10: "Oracle options are doing something curious heading into earnings" (0.7)
+    # fired all 7 variants and "… Oracle Eases Into Earnings …" fired scalper — "into
+    # earnings" is "ahead of earnings" with a different preposition. Same day CNBC's daily
+    # roundup "Apple's foldable phone, Macy's earnings, Treasury buybacks and more in Morning
+    # Squawk" (0.8) fired all 7 on AAPL +2%; it publishes every morning and names whatever
+    # moved. 2026-09-08: "Before You Chase Salesforce's Rally, Take a Closer Look at Its
+    # Latest Earnings Beat" (0.7) fired five variants on a 13-day-old print. 20 event runs
+    # on these four shapes, 20 no_change.
+    r"|\b(heading|going|heads?|eases?|easing|drifts?) into (earnings|results|the print)"
+    r"|morning squawk|before you (chase|buy)|take a closer look",
     re.I,
 )
 
