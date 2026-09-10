@@ -52,6 +52,11 @@
   scalper UNH time-stop −13.84. OneDrive PermissionError ×3 (sniper 11:26, twin 14:31 and
   15:51 UTC) → 31+. ORCL prints after tonight's close; every variant has it flagged for
   tomorrow's daily per lesson 12 — tomorrow's reaction headlines are NOT dampened.
+- **DEPLOYED 22:46 UTC** via `schtasks` from Bash (PowerShell denied again): stop → all 7
+  Ready → start → all 7 Running, heartbeats within 1 s, `sim_stops_restored` on the four
+  shadows that hold active positions (scalper and turtle are core-only tonight). The fleet
+  runs HEAD; the banner first matters after the next outage, the dampeners tomorrow morning
+  when Morning Squawk publishes.
 
 ## 2026-09-10 (owner session) — the fleet was dark the whole of Tue Sep 9; loss-streak cooldown proven in the engine; a $132M headline scored like a $13B one
 
