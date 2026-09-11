@@ -1,5 +1,83 @@
 # Live-session learnings
 
+## 2026-09-11 (Friday night, engineer) — the whole fleet decided blind on ORCL's print morning: an empty bars cache and a news store that forgot 11/16 of what it had seen
+
+- **BUG (fixed, deployed): every daily today ran on `market.json = {}`.** All 7 dailies
+  (13:53–14:07 UTC) and scalper's first seven event runs (13:43–16:44) wrote the same
+  sentence — "market.json is EMPTY ({}), the tape is broken, not quiet (lesson 10)" — on the
+  morning after the ORCL print. Mechanism: `_bars` wipes its cache at the UTC day rollover
+  (00:00 UTC = 20:00 ET) and this connection's history requests failed from the 00:05 fill
+  until the 12:45 ET reconnect (main: JPM/NVDA 13:35, AAPL 13:52, ORCL 13:58; scalper's
+  `bars_refresh` said `failed: [VTI, NVDA, QQQ], fetched 0` six runs straight, then
+  `fetched 20, today 20` at 17:12 — the 09-08 "sticky per connection" reading, not the
+  09-10 "IB serves nothing for 35 min" one; both are real). Every pass tripped the 3-failure
+  breaker over an EMPTY cache, so the 08-26 rule ("degrade to what we already know, never to
+  nothing") held everywhere except at the day boundary, where we know everything from
+  yesterday and threw it away. Three consequences, all visible in the journals: 14 blind
+  model runs; no ATR for the protective trail until 16:47 (NVDA/XLK trails ratcheted the
+  minute the reconnect returned bars); and no previous-close reference for `_day_moves`, so
+  the event gate could not see ORCL's −7% and never fired on it. Fix: at rollover the
+  previous day's bars are kept as a fallback (≤ 5 days old), served when the fetch fails
+  or the breaker trips, still re-fetched every pass, journaled once per distinct set as
+  `bars_stale_served`. Yesterday's bars are what a normal 09:50 daily sees anyway.
+- **BUG (fixed, deployed): the news store's `seen` set kept the 5000 lexicographically
+  LARGEST ids.** `save()` did `sorted(seen)[-5000:]`, so once 5000 ids existed every id
+  hashing below ~'b' (11 of 16 prefixes) was forgotten on each save and came back as "new"
+  at the next 5-minute poll. Measured tonight on main: `seen` holds only b–f prefixes; 81
+  of the 400 stored items are in `seen`; 262 of 400 are re-fetches of items published 09-10
+  (fetched 18:08 today); the oldest stored item was fetched 15:40 UTC. The "36 h" digest
+  window was ~7 h of feed time, so CNBC's 13:34 and MarketWatch's 12:52 ORCL print
+  headlines were gone from the store before the reconnect gave the gate its moves back.
+  Identical on all six shadows. Since when: `seen` crossed 5000 sometime in early September
+  (≈150–250 genuine items/day), so roughly a week — the "two links, one story" and "same
+  story, fresh link" patterns of 09-01/09-04 predate it and were real. Fix: `seen` is
+  persisted in insertion order and truncated from the front; the legacy sorted list ages
+  out on its own. Neither bug placed or blocked an order — zero orders and zero fills
+  fleet-wide today — but together they made the fleet's first Hard print in a fortnight
+  invisible to both the daily and the event path.
+- **Scorer gap, written down, not coded (two code changes already tonight):** ORCL fell 7–8%
+  after a beat, and the reaction headlines scored **0.00**: "Oracle posts 30% revenue growth
+  fueled by AI cloud demand as debt hits $125 billion", "Why Oracle's 'Solid' Results Aren't
+  Giving Its Stock A Big Boost", "Oracle Weakens Bear Case With Broader AI Customer Base and
+  $664 Billion Backlog". The earnings pattern needs the literal "earnings", "quarterly
+  results" or "beats/misses estimates"; "posts N% revenue growth" and bare "results" miss.
+  Meanwhile the 09-10 09:30 futures preview "U.S. Futures Rise as Markets Watch Iran
+  Conflict, Oracle and Adobe Earnings" (first listed by the feed at 19:27 UTC today — a
+  genuine late listing, NOT the seen-bug) scored 0.7 and fired scalper (19:52) and sniper
+  (19:48) eight minutes before the close. Candidates: `(posts|reports) …
+  (revenue|profit|sales|growth)` and `(quarterly|fiscal|q[1-4]|solid|strong|record) results`
+  at 0.7; dampen `futures (rise|fall|slip|climb) as markets watch` and `earnings on tap`.
+- **ADBE cost 18 event runs, all no_change**: "Adobe (ADBE) Q3 2026 Earnings Call Transcript"
+  (0.7, +2%) fired all 7 at 17:13–17:47, "Adobe Just Reported Earnings. Here's What
+  Investors Need to Know." (0.7) fired all 7 at 18:06–18:52, sniper took "Adobe Pulls Back,
+  Then Recovers …" (0.65) and the futures preview hit two. Every triage agreed: beat, Q4
+  guide at/below consensus, CEO handoff + interim CFO, −5% after hours → gap down 241.85 →
+  recovered flat. A transcript re-post and a "here's what to know" explainer of a print that
+  broke last night are lesson 13 in new clothes; deliberately not dampened tonight because
+  the day-after-print reaction IS the tradable moment (lesson 12) and today the dailies that
+  should have owned it were blind.
+- **scalper proposed AAPL spec through its cooldown twice more** (17:15 and 18:45 UTC, both
+  `rejection: entries paused until 2026-09-14: 4 losing trades in a row`) and again wrote
+  "0/0 filled, no AAPL in portfolio" without reading `paused_sleeves`. Second day, five
+  refusals total; the "echo today's rejection lines into the bundle" candidate from 09-10
+  is now the top quiet-night item.
+- Session notes: green CPI day (SPY +1.1%), main +30.09 → −121.17 all-time, −124.38 vs SPY.
+  Standings: twin −17.31, swing −39.17, bold −42.63, turtle −49.90, scalper −51.57,
+  sniper −102.45, main −121.17. sniper's daily hit the 900-s model timeout at 14:06 (retry
+  answered in 62 s, daily landed 10:07 ET — third timeout in the series, one per ~4
+  sessions). The 12:45 ET disconnect fired on all 7 (16:45–16:46 UTC, back in ~1 min;
+  Gateway auto-restart check still open). The 17:00 ET reset passed silently (sniper's AAPL
+  `bars_recovered` 21:07 was the only line). OneDrive PermissionError ×0 — first clean day
+  since the count started. Fleet digest for the week of 09-07 written at 20:24 UTC.
+- **DEPLOYED 22:52 UTC** via `schtasks` from Bash (PowerShell denied again): stop → all 7
+  Ready → start → all 7 Running, heartbeats within 1 s, `sim_stops_restored` on the four
+  shadows with active positions (bold XOM, sniper NVDA, swing/twin XLK). The fleet runs
+  HEAD. The restart emptied the bars cache, so the fallback for Monday is whatever the
+  weekend passes fetch (held + watched every poll; Friday's bars are 3 days old on Monday,
+  inside the 5-day bound). Real test Monday 09:35 ET: if the farm is dead again the journals
+  should show `bars_stale_served` and the dailies a populated market.json with
+  `day_change: null` instead of `{}`; and `seen` should hold 0–9/a prefixes within an hour.
+
 ## 2026-09-10 (Thursday night, engineer) — a full session back; the intraday tape fills at ~10:00 ET on its own; the same three headline shapes cost 20 runs
 
 - **The fleet ran the whole session** after Tuesday's dark day: all 7 dailies at 13:51–13:54
