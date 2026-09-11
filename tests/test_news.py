@@ -43,6 +43,33 @@ def test_parse_feed_and_dedupe(tmp_path):
     assert len(store2.recent(0.5, NOW)) == 0
 
 
+def test_store_evicts_oldest_seen_ids_not_smallest_hashes(tmp_path):
+    """2026-09-11: `seen` was truncated as sorted(seen)[-5000:], so once 5000 ids existed
+    every id hashing below ~'b' (11/16 of all items) was forgotten on each save and came back
+    as "new" at the next 5-min poll. main's store held 400 items of which 262 were yesterday's
+    re-fetches and only 81 were in `seen`; the "36h" window was ~7h and the morning's ORCL print
+    headlines were evicted mid-session. Eviction must be by age: the most recent keep_ids ids
+    survive, whatever they hash to."""
+    store = NewsStore(tmp_path / "news.json", keep_ids=100)
+    old = [f"0{i:023x}" for i in range(60)]                # hash-low ids, seen first
+    new = [f"f{i:023x}" for i in range(80)]                # hash-high ids, seen later
+    store.seen.update(old)
+    store.save()
+    store.seen.update(new)
+    store.save()
+    store2 = NewsStore(tmp_path / "news.json", keep_ids=100)
+    assert len(store2.seen) == 100
+    assert set(new) <= store2.seen                          # everything recent is remembered
+    assert len(store2.seen & set(old)) == 20                # the 40 evicted all came from the OLD batch
+    # a re-poll of a recently seen item is NOT fresh again
+    seen_again = set(store2.seen)
+    assert poll(["u"], seen_again, fetcher=lambda u: RSS, now=NOW)  # first time: 3 fresh
+    store2.seen = seen_again
+    store2.save()
+    store3 = NewsStore(tmp_path / "news.json", keep_ids=100)
+    assert poll(["u"], store3.seen, fetcher=lambda u: RSS, now=NOW) == []
+
+
 def test_dead_feed_is_skipped():
     def fetcher(url):
         raise OSError("down")

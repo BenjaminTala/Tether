@@ -116,6 +116,7 @@ class NewsStore:
         self.path = Path(path)
         self.keep_items, self.keep_ids = keep_items, keep_ids
         self.seen: Set[str] = set()
+        self._seen_order: List[str] = []                  # ids oldest -> newest, for eviction
         self.items: List[NewsItem] = []
         self._load()
 
@@ -124,14 +125,26 @@ class NewsStore:
             return
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            self.seen = set(data.get("seen", []))
+            self._seen_order = [str(i) for i in data.get("seen", [])]
+            self.seen = set(self._seen_order)
             self.items = [NewsItem(**d) for d in data.get("items", [])]
         except (json.JSONDecodeError, TypeError, OSError):
-            self.seen, self.items = set(), []              # corrupt state: start clean (ids re-dedupe)
+            self.seen, self._seen_order, self.items = set(), [], []   # corrupt state: start clean
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {"seen": sorted(self.seen)[-self.keep_ids:],
+        # Evict the OLDEST ids, not the lexicographically smallest. Until 2026-09-11 this was
+        # `sorted(seen)[-keep_ids:]`: once 5000 ids were reached, every id hashing below ~'b'
+        # (11/16 of them) was forgotten on each save, re-ingested as "new" at the next poll,
+        # and pushed real items out of the 400-item window — 262 of main's 400 stored items
+        # were yesterday's re-fetches, only 81 were in `seen`, and the "36h" digest window
+        # held ~7h of feed time — the morning's ORCL print headlines were gone by mid-session.
+        known = set(self._seen_order)
+        self._seen_order = [i for i in self._seen_order if i in self.seen] \
+            + [i for i in self.seen if i not in known]
+        self._seen_order = self._seen_order[-self.keep_ids:]
+        self.seen = set(self._seen_order)
+        data = {"seen": list(self._seen_order),
                 "items": [asdict(i) for i in self.items[-self.keep_items:]]}
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
