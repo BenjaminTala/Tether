@@ -45,6 +45,7 @@ from ibagent.sleeves import core_rebalance, evaluate_breakers, protective_action
 DATA_DIR = Path("data")
 BARS_FOR_STATS = 300
 BARS_FAIL_STREAK = 3          # consecutive bar failures in one pass before skipping the rest
+BARS_STALE_MAX_DAYS = 5       # serve yesterday's cached bars while the farm is down, up to this age
 PROTECTIVE_MIN_SPACING_S = 900
 STATUS_UPDATE_SPACING_S = 3600          # intraday Telegram status every hour during RTH
 
@@ -137,6 +138,8 @@ class Supervisor:
         self._bars_cache: Dict[str, List[Bar]] = {}
         self._bars_cache_day: str = ""
         self._bars_warned: Set[str] = set()
+        self._bars_stale: Dict[str, List[Bar]] = {}       # previous days' bars, the fallback
+        self._bars_stale_logged: frozenset = frozenset()
         self._conn_down_since: Optional[datetime] = None
         self._conn_fail_count: int = 0
         self._conn_last_remind: Optional[datetime] = None
@@ -330,13 +333,28 @@ class Supervisor:
         """Daily bars, cached per calendar day (history doesn't change intraday)."""
         day = now.date().isoformat()
         if self._bars_cache_day != day:
+            # Day rollover keeps what we already know. 2026-09-11: the farm answered nothing
+            # for this connection from the 00:05 UTC cache fill until the 12:45 ET reconnect,
+            # so every pass tripped the breaker over an EMPTY cache and all 7 variants' dailies
+            # (plus scalper's first 7 event runs) got market.json = {} on the morning after
+            # the ORCL print. Yesterday's bars are exactly what a normal morning serves anyway
+            # (the cache is filled at ~20:05 ET with bars ending yesterday); they are kept as
+            # a fallback for up to BARS_STALE_MAX_DAYS and re-fetched on every pass.
+            oldest = now.date() - timedelta(days=BARS_STALE_MAX_DAYS)
+            self._bars_stale = {s: b for s, b in {**self._bars_stale, **self._bars_cache}.items()
+                                if b and b[-1].ts.date() >= oldest}
             self._bars_cache, self._bars_cache_day = {}, day
             self._bars_warned.clear()
+            self._bars_stale_logged = frozenset()
         out: Dict[str, List[Bar]] = {}
+        stale_served: List[str] = []
         streak = 0
         tripped = False
         for i, sym in enumerate(symbols):
             if sym not in self._bars_cache:
+                if sym in self._bars_stale:
+                    out[sym] = self._bars_stale[sym]       # overwritten below if the fetch works
+                    stale_served.append(sym)
                 if tripped:
                     continue
                 if streak >= BARS_FAIL_STREAK:
@@ -363,10 +381,21 @@ class Supervisor:
                         self.journal.record("warning", {"where": "bars", "symbol": sym, "err": str(exc)})
                     continue
                 streak = 0
+                if stale_served and stale_served[-1] == sym:
+                    stale_served.pop()
                 if sym in self._bars_warned:
                     self._bars_warned.discard(sym)
                     self.journal.record("broker", {"event": "bars_recovered", "symbol": sym})
             out[sym] = self._bars_cache[sym]
+        served = frozenset(stale_served)
+        if served and served != self._bars_stale_logged:
+            # One line per distinct set served (not per tick): which symbols run on
+            # yesterday's bars, and how old those are.
+            self._bars_stale_logged = served
+            last = max(self._bars_stale[s][-1].ts.date() for s in served)
+            self.journal.record("broker", {"event": "bars_stale_served", "count": len(served),
+                                           "symbols": sorted(served)[:12],
+                                           "last_bar": last.isoformat()})
         return out
 
     def _refresh_bars(self, symbols: Sequence[str], today_local) -> Dict[str, SymbolStats]:

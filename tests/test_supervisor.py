@@ -418,9 +418,13 @@ def test_bars_circuit_breaker_skips_rest_of_pass(env):
     broker.daily_bars = no_bars
     clock.now = NOW + timedelta(days=1)                    # new day, fresh cache: two good, then dead
     good = {"S0", "S1"}
-    broker.daily_bars = lambda c, d: [Bar(NOW, 1.0, 1.0, 1.0, 1.0, 1.0)] if c.symbol in good else no_bars(c, d)
+    fresh = NOW + timedelta(days=1)
+    broker.daily_bars = lambda c, d: [Bar(fresh, 1.0, 1.0, 1.0, 1.0, 1.0)] if c.symbol in good else no_bars(c, d)
     out = sup._bars(syms, clock())
-    assert set(out) == good and len(calls) == BARS_FAIL_STREAK
+    assert len(calls) == BARS_FAIL_STREAK                  # the breaker still bounds the pass
+    assert sorted(out) == sorted(syms)                     # ...but yesterday's bars are served
+    assert all(out[s][-1].ts == fresh for s in good)
+    assert all(out[s][-1].ts == NOW for s in set(syms) - good)
 
 
 def test_bars_circuit_breaker_still_serves_cached_symbols(env):
@@ -508,6 +512,56 @@ def test_refresh_bars_journals_outcome_and_fetches_held_first(env):
     assert p["fetched"] == 2 and p["today"] == 1 and p["stale"] == ["AAPL"]
     assert p["failed"] == ["ABBV", "ADBE", "AMD"] and p["unreached"] == 2   # QQQ, XLF never probed
     assert "QQQ" not in calls and "XLF" not in calls
+
+
+def test_bars_serve_yesterdays_bars_when_the_farm_is_dead_after_rollover(env):
+    """2026-09-11: the per-day cache was wiped at 00:00 UTC and the history farm answered
+    nothing for this connection until the 12:45 ET reconnect. Every pass tripped the breaker
+    over an EMPTY cache, so all 7 variants' dailies (13:53-14:07 UTC) and scalper's first 7
+    event runs got market.json = {} on the morning after the ORCL print — 14 blind model
+    runs, and no ATR for the protective trail. Yesterday's bars are what a normal morning
+    serves anyway; keep them as a bounded-age fallback and re-fetch on every pass."""
+    from ibagent.broker.base import Bar
+    from ibagent.supervisor import BARS_FAIL_STREAK, BARS_STALE_MAX_DAYS
+    m, broker, sup, clock, tmp = env
+    held = ["JPM", "NVDA", "SGOV", "VTI"]
+    broker.daily_bars = lambda c, d: [Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    sup._bars(held, clock())                                # yesterday: everything cached
+    calls = []
+
+    def dead(contract, days):
+        calls.append(contract.symbol)
+        raise RuntimeError(f"no historical bars for {contract.symbol}")
+    broker.daily_bars = dead
+    clock.now = NOW + timedelta(days=1)                     # the morning after: farm dead
+    out = sup._bars(held, clock())
+    assert sorted(out) == held                              # served, not {}
+    assert all(out[s][-1].ts == NOW for s in held)
+    assert len(calls) == BARS_FAIL_STREAK                   # still re-fetched, still bounded
+    served = [j for j in _journal_kinds(tmp, "broker") if j["payload"].get("event") == "bars_stale_served"]
+    assert len(served) == 1
+    assert served[0]["payload"] == {"event": "bars_stale_served", "count": 4,
+                                    "symbols": held, "last_bar": "2026-08-12"}
+    sup._bars(held, clock())                                # same set again: no duplicate line
+    assert len([j for j in _journal_kinds(tmp, "broker")
+                if j["payload"].get("event") == "bars_stale_served"]) == 1
+    assert sorted(w["payload"]["symbol"] for w in _journal_kinds(tmp, "warning", "bars")
+                  if "symbol" in w["payload"]) \
+        == ["JPM", "NVDA", "SGOV"]                          # failures are still warned once each
+
+    fresh = NOW + timedelta(days=1)
+    broker.daily_bars = lambda c, d: ([Bar(fresh, 100.0, 101.0, 99.0, 100.5, 1e6)]
+                                      if c.symbol == "JPM" else dead(c, d))
+    out = sup._bars(held, clock())                          # JPM recovers, the rest stay stale
+    assert out["JPM"][-1].ts == fresh and out["NVDA"][-1].ts == NOW
+    served = [j for j in _journal_kinds(tmp, "broker") if j["payload"].get("event") == "bars_stale_served"]
+    assert served[-1]["payload"]["symbols"] == ["NVDA", "SGOV", "VTI"]
+    assert [j["payload"]["symbol"] for j in _journal_kinds(tmp, "broker")
+            if j["payload"].get("event") == "bars_recovered"] == ["JPM"]
+
+    broker.daily_bars = dead
+    clock.now = NOW + timedelta(days=BARS_STALE_MAX_DAYS + 2)   # too old: fail closed again
+    assert sup._bars(held, clock()) == {}
 
 
 def test_fleet_digest_fires_friday_and_covers_the_whole_week(env, monkeypatch):
