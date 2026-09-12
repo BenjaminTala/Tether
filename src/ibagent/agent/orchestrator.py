@@ -130,7 +130,10 @@ def run_cycle(m: Mandate, book: Book, journal: Journal, alerter: Alerter, runner
                            held=True, reason=reason)
 
     runs_root = default_runs_root(m.llm.sandbox.runs_root)
-    tail = journal.tail(40, kinds=("decision", "fill", "run_summary"))
+    # Rejections ride along so a refused entry reads as "REJECTED: cooldown" next to the
+    # decision that proposed it — scalper re-proposed AAPL through its loss-streak cooldown
+    # five times on 2026-09-10/11 and wrote "0/0 filled, no cause visible" each time.
+    tail = journal.tail(40, kinds=("decision", "fill", "run_summary", "rejection"))
     bundle = build_bundle(m, book, snap, stats, digest_md, tail, run_type, runs_root, now,
                           event_note=event_note, skills_dir=skills_dir)
 

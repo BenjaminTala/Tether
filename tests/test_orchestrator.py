@@ -108,6 +108,33 @@ def test_full_trade_path_on_sim(env):
     assert res.bundle_dir and (m.llm.sandbox.runs_root in res.bundle_dir)
 
 
+def test_rejected_entry_is_shown_in_next_journal_tail(env):
+    """scalper proposed AAPL through its loss-streak cooldown five times on 2026-09-10/11 and
+    wrote '0/0 filled, no cause visible' each time: the engine's rejection was journaled but
+    never shown to the model. The next bundle's journal_tail.md must carry it verbatim."""
+    from datetime import date
+    from pathlib import Path
+    m, broker, book, journal, executor, state_path = env
+    broker.set_quote("QQQ", 99.98, 100.02)
+    book.pause_sleeve("trend", date(2026, 8, 14))          # NOW is 2026-08-12: still paused
+    d = decision_dict(action="rebalance", run_type="weekly", positions=[{
+        "symbol": "QQQ", "sleeve": "trend", "target_weight": 0.12,
+        "thesis": "momentum breakout hold", "invalidation": "close under 50d",
+        "stop_price": 92.0, "confidence": 0.6, "horizon_days": 30,
+        "entry_checklist": {"sized_in_window": True, "stop_within_bounds": True,
+                            "not_chasing": True, "basis": "trend"}}])
+    res = run(env, FakeRunner([ok(d)]), run_type="weekly", quotes={"QQQ": make_quote("QQQ", 100)})
+    assert res.report is not None and res.report.filled == 0
+    assert "QQQ" not in book.positions
+    rejections = [e for e in journal.tail(20) if e["kind"] == "rejection"]
+    assert rejections and rejections[-1]["payload"]["reason"] == "trend sleeve paused"
+
+    res2 = run(env, FakeRunner([ok(decision_dict())]))
+    tail_md = (Path(res2.bundle_dir) / "journal_tail.md").read_text(encoding="utf-8")
+    assert "REJECTED entry QQQ: trend sleeve paused" in tail_md
+    assert "do not re-propose it until the reason has cleared" in tail_md
+
+
 def test_bundle_contains_context_files(env):
     res = run(env, FakeRunner([ok(decision_dict())]))
     from pathlib import Path

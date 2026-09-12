@@ -252,6 +252,10 @@ def journal_tail_md(entries: Sequence[dict], max_chars: int = 6000) -> str:
                          f"{p.get('symbol')} @ {p.get('price')}{tail} ({str(p.get('reason'))[:80]})")
         elif kind == "run_summary":
             lines.append(f"- {e.get('ts', '')[:16]} run {p.get('run_type')}: {p.get('result')}")
+        elif kind == "rejection":
+            lines.append(f"- {e.get('ts', '')[:16]} REJECTED {p.get('what')} {p.get('symbol')}: "
+                         f"{str(p.get('reason'))[:160]} (the engine refused this — it was never "
+                         "sent to the broker; do not re-propose it until the reason has cleared)")
     return "\n".join(lines)[:max_chars]
 
 
