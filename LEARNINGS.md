@@ -1,5 +1,65 @@
 # Live-session learnings
 
+## 2026-09-12 (Saturday night, engineer) — the Gateway exited Friday night and stayed dead 18 h; the 12:45 ET disconnect is the Gateway's own auto-restart clock, set to 11:45 AM local
+
+- **ONGOING at 22:40 UTC: IB Gateway has been gone since 04:13 UTC Saturday (23:13 Friday
+  local, America/Bogota).** All 7 variants logged `Socket disconnect` at 04:13–04:17 UTC,
+  then exactly one `connect` error each at 04:18–04:22 — "connection refused — no Gateway
+  process is listening; IB Gateway needs to be started" — and then NOTHING for 18 hours.
+  `ibgateway.exe` is not in the task list and port 4002 is not listening. The Gateway's own
+  files say it exited on purpose rather than crashed: `jts.ini`, `xmlopt.dat` and `Fri.rul`
+  were all written at 23:13 local (the settings flush on exit), there is no application-error
+  event, the PC has not rebooted since 09-09 08:35, and `launcher.log` has no entry after the
+  11:45 restart — so nothing has tried to bring it back. 23:13 local is 00:13 ET Saturday,
+  inside IB's Friday-night maintenance window. The two earlier process deaths (08-26
+  22:55→02:59 UTC, 09-07 01:32→04:07 UTC) self-healed in ~4 h with a launcher restart on
+  record (09-06 23:07 local); this one has not. **If nobody starts and logs into the
+  Gateway before Monday 09:30 ET the fleet is blind at the open** — main's GTC stops at IBKR
+  stand guard as on 08-24 (lesson 6), the shadow sims' stops do not. The 7 supervisors are
+  fine (heartbeats fresh at 22:38 UTC, all tasks Running, watchdog state `{}` = healthy by
+  its heartbeat-only definition) and have been retrying every tick; with `dedupe_minutes:
+  30` the hourly "broker still unreachable" reminders should have reached Telegram ~18
+  times — but see the next bullet.
+- **Fix: the hourly outage reminder now leaves a journal line.** The 18-hour hole is the
+  09-06 watchdog problem again: the reminder went to Telegram only, so "was the owner told,
+  how many attempts, what did the latest failure say" is unanswerable from the journal after
+  the fact. One `broker` / `still_down` line per hourly reminder (down_minutes,
+  failed_attempts, err); the hysteresis itself is unchanged. Test extends the outage case.
+- **The 12:45 ET disconnect is solved: it is the Gateway's daily auto-restart, set to 11:45
+  AM local.** `jts.ini` has `AutoRestart=1`, `TimeZone=America/Bogota` (UTC−5), and
+  `launcher.log` says "Daily auto-restart is enabled" and rotates at exactly 11:45 local
+  every day (`launcher.20260905…0911.log` all stamped 11:45; 11:45 Bogota = 12:45 ET =
+  16:45 UTC, the minute every variant has reconnected since 09-03). Before 09-03 the same
+  event was the "04:45 UTC nightly blip" = 23:45 local, and the Gateway's `.trd` files from
+  before 09-03 (Sat.trd 08-22, Mon.trd 09-01) are stamped 23:45. So on 09-03 the restart time moved from 11:45 PM to 11:45 AM — an AM/PM
+  flip in the Gateway's Configure → Lock and Exit dialog is the whole story, exactly the
+  09-08 suspicion. Owner fix (one click): set Auto restart back to 11:45 PM local (or any
+  time between 17:15 ET and 09:00 ET); that takes the daily blip out of RTH. Note it will
+  not revive a Gateway that has exited — today's outage needs a manual start either way.
+- **Fix (the 09-10 top quiet-night item): the model now sees the engine's rejections.**
+  scalper proposed XOM/TSLA/AAPL through its 4-loser cooldown five times on 09-10/11 and
+  wrote "0/0 filled, no cause visible to me" six runs running; `paused_sleeves` was in
+  portfolio.json but the `rejection` line ("entries paused until 2026-09-14: 4 losing trades
+  in a row (cooldown)") was journaled and never shown. `journal_tail.md` now carries
+  rejection entries as `REJECTED entry AAPL: <reason> (the engine refused this — it was never
+  sent to the broker; do not re-propose it until the reason has cleared)` next to the
+  decision that caused them. Regression test pauses a sleeve, proposes, checks the next
+  bundle. First live effect: whenever the next refusal happens (scalper's cooldown itself
+  expires 09-14).
+- **Last night's news-store fix has healed on all 7**: `seen` holds 5000 ids across every
+  hex prefix and 400 of 400 stored items are in it (was 81/400 with b–f only at 22:40 UTC
+  yesterday). The bars fallback has had no session to prove itself; its first test is the
+  Monday 09:50 daily — and only if the Gateway is up.
+- No session (Saturday), no decisions, no orders; standings unchanged from Friday: twin
+  −17.31, swing −39.17, bold −42.63, turtle −49.90, scalper −51.57, sniper −102.45, main
+  −121.17. OneDrive PermissionError ×0.
+- **NOT deployed, on purpose.** Both changes are picked up by the next supervisor restart;
+  restarting tonight would (a) wipe the in-memory bars cache and its `_bars_stale`
+  fallback, which — with the Gateway dead — nothing could refill before Monday's open, so a
+  dead farm at 09:35 ET would again mean `market.json = {}`; and (b) reset the seven
+  outage counters mid-outage, firing seven fresh "broker connection down" alerts and losing
+  the eventual `down_minutes` summary. Neither change buys anything before Monday.
+
 ## 2026-09-11 (Friday night, engineer) — the whole fleet decided blind on ORCL's print morning: an empty bars cache and a news store that forgot 11/16 of what it had seen
 
 - **BUG (fixed, deployed): every daily today ran on `market.json = {}`.** All 7 dailies
