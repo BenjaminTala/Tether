@@ -324,6 +324,12 @@ def test_connection_outage_hysteresis(env):
     assert [lvl for lvl, _ in a.sent] == ["warning", "warning"]
     assert a.sent[1][1] == "broker still unreachable"
     assert len(_journal_kinds(tmp, "error", "connect")) == 1
+    # ... and the reminder leaves a journal record (2026-09-12: 18 h of silence while the
+    # Gateway was dead — the audit trail must not live only in Telegram)
+    still = [j for j in _journal_kinds(tmp, "broker") if j["payload"].get("event") == "still_down"]
+    assert len(still) == 1
+    assert still[0]["payload"]["down_minutes"] == 65 and still[0]["payload"]["failed_attempts"] == 9
+    assert "refused" in still[0]["payload"]["err"]
 
     def reconnect():                                       # recovery: one summary each way
         broker.is_connected = lambda: True

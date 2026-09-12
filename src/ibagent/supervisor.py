@@ -290,6 +290,12 @@ class Supervisor:
             elif self._conn_last_remind is None or now - self._conn_last_remind >= timedelta(hours=1):
                 self._conn_last_remind = now
                 mins = int((now - self._conn_down_since).total_seconds() // 60)
+                # One journal line per hourly reminder: on 2026-09-12 the Gateway died at
+                # 04:13 UTC and the journals then held NOTHING for 18 h — whether the owner
+                # was reminded, and what the latest failure said, was unknowable after the fact.
+                self.journal.record("broker", {"event": "still_down", "down_minutes": mins,
+                                               "failed_attempts": self._conn_fail_count,
+                                               "err": str(exc)[:200]})
                 self.alerter.warning("broker still unreachable",
                                      f"down {mins} min, {self._conn_fail_count} attempts; "
                                      f"latest: {str(exc)[:200]}")
