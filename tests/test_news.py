@@ -138,6 +138,37 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
     assert st.count_today == 0
 
 
+def test_print_headlines_without_the_word_earnings_score_as_a_print():
+    """2026-09-11: the morning after ORCL's print the real reaction headlines scored 0.00 —
+    "beats on top and bottom lines", "posts higher profit, revenue", "posts 30% revenue
+    growth", "'solid' results" — because the earnings pattern needed the literal word. The
+    event gate could never have fired on ORCL −7% even with a working tape. Same day the
+    pre-market index preview "U.S. Futures Rise as Markets Watch … Oracle and Adobe Earnings"
+    scored 0.7 and fired scalper and sniper eight minutes before the close."""
+    def mk(title, link):
+        return NewsItem(id=link, source="s", title=title, link=link, summary="",
+                        published=NOW.isoformat(), fetched=NOW.isoformat())
+    prints = [
+        mk("Oracle beats on top and bottom lines as cloud revenue surges", "p1"),
+        mk("Oracle Posts Higher Profit, Revenue on Continued Cloud Infrastructure Strength", "p2"),
+        mk("Oracle posts 30% revenue growth fueled by AI cloud demand as debt hits $125 billion", "p3"),
+        mk("Why Oracle's 'Solid' Results Aren't Giving Its Stock A Big Boost", "p4"),
+        mk("Adobe posts record quarter, lifts guidance as AI push pays off", "p5"),
+        mk("Descartes reports another record-breaking quarter", "p6"),
+    ]
+    for s in score_items(prints, ["ORCL", "ADBE"]):
+        assert s.score >= 0.7, s.item.title
+    # "reports" as in news reports, or a figure that is not a result, must NOT become a print
+    for title in ("Grab Holdings Slips on Atome Fintech Acquisition Reports",
+                  "Dell (DELL) Reports $60.9B of AI Server Orders and a $95B Backlog",
+                  "Apple reports say iPhone demand is soft, analysts cut price target"):
+        s = score_items([mk(title, "n")], ["AAPL"])[0]
+        assert "posts?" not in " ".join(s.reasons), title
+    fut = score_items([mk("U.S. Futures Rise as Markets Watch Iran Conflict, Oracle and Adobe "
+                          "Earnings: Dow Jones, S&P 500, Nasdaq", "f1")], ["ORCL", "ADBE"])[0]
+    assert 0.3 <= fut.score < 0.7 and "preview/commentary: halved" in fut.reasons
+
+
 def test_digest_sections():
     scored = score_items(items(), ["AAPL"])
     md = build_digest(scored, held={"AAPL"}, watched=set())

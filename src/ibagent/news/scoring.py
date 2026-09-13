@@ -22,6 +22,18 @@ KEYWORD_WEIGHTS: Dict[str, float] = {
     r"fda (approval|reject|denies|clears)|clinical (hold|trial (halt|fail))": 0.80,
     r"guidance (cut|lower|raise|hike)|(cuts|raises|slashes|lifts) (guidance|outlook|forecast)": 0.75,
     r"earnings|quarterly results|q[1-4] (results|revenue|report)|(beats|misses) (estimates|expectations)": 0.70,
+    # 2026-09-11, the morning after ORCL's print (−7% on a beat): "Oracle beats on top and
+    # bottom lines as cloud revenue surges", "Oracle Posts Higher Profit, Revenue on Continued
+    # Cloud Infrastructure Strength", "Oracle posts 30% revenue growth fueled by AI cloud
+    # demand as debt hits $125 billion" and "Why Oracle's 'Solid' Results Aren't Giving Its
+    # Stock A Big Boost" all scored 0.00 — the print itself, headlined without the literal
+    # word "earnings". Same weight as the earnings line: a reported number is the print.
+    r"\b(posts?|reports?|posted|reported) (a |another )?"
+    r"(\$?\d[\d.,]*[%mbk]?|record|higher|lower|strong|weak|mixed|solid|double-digit|narrower|"
+    r"wider|surprise|flat)\b[\w\s%$.,'&-]{0,25}?\b(revenue|profit|sales|quarter|loss|income|growth|eps)\b"
+    r"|beats? on (the )?top and bottom"
+    r"|\b(quarterly|fiscal|q[1-4]|solid|strong|record|mixed|weak|healthy|blowout|disappointing)"
+    r"\W{0,2}results\b": 0.70,
     r"ceo|cfo (resigns?|steps down|departs|fired|ousted)": 0.65,
     r"recall|halts? production|plant (fire|shutdown)|cyber ?attack|data breach|hack(ed)?": 0.60,
     r"downgrade[ds]?|upgrade[ds]?|price target": 0.45,
@@ -61,7 +73,14 @@ PREVIEW_COMMENTARY = re.compile(
     # Latest Earnings Beat" (0.7) fired five variants on a 13-day-old print. 20 event runs
     # on these four shapes, 20 no_change.
     r"|\b(heading|going|heads?|eases?|easing|drifts?) into (earnings|results|the print)"
-    r"|morning squawk|before you (chase|buy)|take a closer look",
+    r"|morning squawk|before you (chase|buy)|take a closer look"
+    # 2026-09-11: "U.S. Futures Rise as Markets Watch Iran Conflict, Oracle and Adobe
+    # Earnings" (0.7 via "earnings") fired scalper 19:52 and sniper 19:48 UTC — eight minutes
+    # before the close, on a pre-market index preview the feed listed late. An index-futures
+    # headline is market-wide colour that names whatever is on the calendar; never a
+    # single-stock event.
+    r"|\bfutures (rise|fall|slip|climb|gain|drop|edge|dip|point|rally|slide|steady|flat|mixed"
+    r"|higher|lower)\b",
     re.I,
 )
 
