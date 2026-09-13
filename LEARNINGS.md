@@ -1,5 +1,70 @@
 # Live-session learnings
 
+## 2026-09-13 (Sunday night, engineer) — the Gateway is still dead after 42 h; Monday's open is 11 h away; the scorer finally reads a print that does not say "earnings"
+
+- **ONGOING at 22:40 UTC: IB Gateway has been gone since 04:13 UTC Saturday — 42 h, no
+  self-heal, no restart attempt.** Port 4002 refuses (`SYN_SENT` only), `ibgateway.exe` is
+  not running, and every file under `C:\Jts\ibgateway\1050` is stamped 23:13 Friday local
+  (the clean-exit flush) — `launcher.log` has not rotated since the 11:45 Friday restart, so
+  nothing has tried. The 08-26 and 09-07 process deaths healed in ~4 h; this one is 10× that
+  and counting. The 7 supervisors are healthy (heartbeats 22:35–22:40 UTC, all tasks
+  Running, watchdog `{}`) and `_ensure_connected` has been failing every tick, so the
+  hourly "broker still unreachable" Telegram reminder should be on its ~42nd send — but the
+  journals cannot confirm it (last night's `still_down` line is committed, not deployed):
+  all 7 journals hold exactly one `connect` error each at 04:18–04:22 UTC Saturday and
+  nothing since except main's `engineer` verdict line. **If nobody starts and logs into the
+  Gateway before Monday 09:30 ET the fleet is blind at the open.** What the code does then
+  (read tonight, not guessed): `tick()` returns at `_ensure_connected()` before any job, so
+  the weekly/daily slots stay UNMARKED and fire at the first connected tick inside the
+  order window (≤ 15:30 ET); the 16:05 report fires at the first connected tick after it
+  and leads with the MISSED banner (09-10 fix) because `last_protective_ts` is Friday
+  15:51 ET; the news poll has been dead since 04:11 UTC Saturday too (newest stored item),
+  so the event gate reopens with whatever the first poll fetches. main's GTC stops at IBKR
+  guard its 4 positions (lesson 6); the shadow sims' stops (bold XOM, sniper NVDA,
+  swing/twin XLK) cannot fire while the process is down.
+- **Monday's bars fallback is intact IF nothing restarts the fleet before the open.** The
+  09-11 22:52 deploy emptied every cache; the 00:05 UTC Saturday fill ran while the Gateway
+  was still alive and left NO `no historical bars` line on any variant (first silent fill in
+  weeks), so each supervisor holds Friday's bars in `_bars_cache` → rolled into
+  `_bars_stale` at 00:00 UTC Sunday and again (merge, not clobber — checked the rollover
+  code) at 00:00 UTC Monday; Friday's last bar 09-11 ≥ Monday's 5-day floor 09-09. A
+  restart tonight would throw that away and a dead history farm at 09:35 ET would mean
+  `market.json = {}` again. So: **NOT deployed, third night running**, same reasons as
+  last night plus this one; the three undeployed changes (still_down journal line,
+  rejections in journal_tail, tonight's scorer patterns) first matter after the next
+  restart, which should happen on a night when the Gateway is up and the fill can refill.
+- **Fix: the scorer reads a print that is not headlined "earnings" (the 09-11 gap, written
+  down twice).** Measured on main's live store tonight: "Oracle beats on top and bottom
+  lines as cloud revenue surges" (Yahoo 20:22 UTC 09-10 — THE print headline) scored 0.00;
+  so did "Oracle Posts Higher Profit, Revenue on Continued Cloud Infrastructure Strength"
+  and "Oracle Stock Jumps as AI Demand Drives Cloud Revenues Higher"; "Adobe posts record
+  quarter, lifts guidance" got its 0.75 only from "lifts guidance". Add the three 09-11
+  morning reaction headlines from Friday's entry (all 0.00) and the ORCL print was invisible
+  to the gate from every angle — even with a working tape the −7% could not have fired,
+  because the only ORCL items at ≥ 0.7 were the two that happened to say "earnings". New
+  0.70 shapes: `(posts|reports) <number|record|higher|lower|…> … (revenue|profit|sales|
+  quarter|loss|income|growth|eps)`, `beats on top and bottom`, and `<quarterly|fiscal|solid|
+  strong|record|…> results` (quotes tolerated: "'Solid' Results"). The qualifier is
+  required on purpose so "Acquisition Reports" and "reports say iPhone demand is soft" stay
+  put. Across the 400 stored items exactly 8 change, all real prints (SNOW, CRDO, MDB, RVLV,
+  ADBE, ORCL ×2, DSGX). Second half: `futures (rise|fall|slip|…)` is dampened — the 09-11
+  index preview fired scalper and sniper 8 min before the close. Regression test pins the
+  six prints, three non-prints and the futures title. "Oracle Weakens Bear Case With
+  Broader AI Customer Base and $664 Billion Backlog" stays at 0.00 — no pattern short of
+  "backlog" would be honest, and that word is a preview hook as often as a print one.
+- **Ellison's $7.5 B 10b5-1 sale plan scored 0.00** (CNBC 01:36 UTC Saturday, the last
+  item the store fetched before the Gateway died). ~1% of ORCL's cap, Soft by lesson 16's
+  denominator, and Monday's daily sees it in the digest only if the next poll re-lists it
+  (36 h window ends ~13:36 UTC Monday). Not a scorer change: an insider-sale pattern with
+  no denominator would fire on every Form 4 headline. Noted so Monday's ORCL read is not a
+  surprise.
+- No session (Sunday), no decisions, no orders, no OneDrive errors (nothing ran); standings
+  unchanged since Friday: twin −17.31, swing −39.17, bold −42.63, turtle −49.90, scalper
+  −51.57, sniper −102.45, main −121.17. News `seen` health: 0–9/a/b prefixes now hold ~30
+  ids each and c–f ~1200 each — the legacy sorted tail aging out exactly as the 09-11 fix
+  predicted. scalper's 4-loser cooldown expires 09-14; the first refusal after that will be
+  the rejection-tail change's first live effect — once deployed.
+
 ## 2026-09-12 (Saturday night, engineer) — the Gateway exited Friday night and stayed dead 18 h; the 12:45 ET disconnect is the Gateway's own auto-restart clock, set to 11:45 AM local
 
 - **ONGOING at 22:40 UTC: IB Gateway has been gone since 04:13 UTC Saturday (23:13 Friday
