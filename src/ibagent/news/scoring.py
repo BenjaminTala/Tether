@@ -87,7 +87,7 @@ PREVIEW_COMMENTARY = re.compile(
 # Company-name aliases for whitelist tickers (title matching; ticker itself always matches).
 SYMBOL_ALIASES: Dict[str, List[str]] = {
     "AAPL": ["apple"], "MSFT": ["microsoft"], "NVDA": ["nvidia"], "AMZN": ["amazon"],
-    "GOOGL": ["google", "alphabet"], "META": ["meta platforms", "facebook", "instagram"],
+    "GOOGL": ["google", "alphabet"], "META": ["meta platforms", "meta", "facebook", "instagram"],
     "TSLA": ["tesla"], "AVGO": ["broadcom"], "AMD": ["advanced micro"], "NFLX": ["netflix"],
     "CRM": ["salesforce"], "ADBE": ["adobe"], "ORCL": ["oracle"], "CSCO": ["cisco"],
     "JPM": ["jpmorgan", "jp morgan"], "BAC": ["bank of america"], "GS": ["goldman sachs"],
@@ -109,10 +109,15 @@ class ScoredItem:
 
 
 def _symbol_patterns(symbols: Iterable[str]) -> List[Tuple[str, re.Pattern]]:
+    # The ticker itself must appear in UPPER CASE: headlines write "CAT shares" / "(NVDA)",
+    # never "cat". Matching it case-insensitively tagged "Red Cat Barely Budges" (a drone
+    # maker) as CAT and fired six variants' event runs on 2026-09-14; the same rule would
+    # tag "Jack Ma" as MA, "Apple v. Samsung" as V and "Disney's dis" as DIS. Company-name
+    # aliases stay case-insensitive.
     pats = []
     for sym in symbols:
         names = SYMBOL_ALIASES.get(sym, [])
-        alts = [rf"\b{re.escape(sym)}\b"] + [rf"\b{re.escape(n)}\b" for n in names]
+        alts = [rf"(?-i:\b{re.escape(sym)}\b)"] + [rf"\b{re.escape(n)}\b" for n in names]
         pats.append((sym, re.compile("|".join(alts), re.I)))
     return pats
 

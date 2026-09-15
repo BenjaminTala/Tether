@@ -169,6 +169,29 @@ def test_print_headlines_without_the_word_earnings_score_as_a_print():
     assert 0.3 <= fut.score < 0.7 and "preview/commentary: halved" in fut.reasons
 
 
+def test_ticker_match_is_case_sensitive_but_company_names_are_not():
+    """2026-09-14: "AeroVironment Rises 6% as Post-Earnings Recovery Outpaces Drone Group;
+    Ondas Ticks Up, Red Cat Barely Budges" (0.7, CAT −4% on the day) was tagged CAT because
+    the ticker matched case-insensitively, and fired six variants' event runs on a drone
+    maker's headline. A ticker only counts in upper case; company names stay case-blind."""
+    def mk(title, link):
+        return NewsItem(id=link, source="s", title=title, link=link, summary="",
+                        published=NOW.isoformat(), fetched=NOW.isoformat())
+    syms = ["CAT", "MA", "V", "DIS", "NVDA"]
+    red_cat = score_items([mk("AeroVironment Rises 6% as Post-Earnings Recovery Outpaces Drone "
+                              "Group; Ondas Ticks Up, Red Cat Barely Budges", "rc")], syms)[0]
+    assert "CAT" not in red_cat.symbols
+    for title, sym in (("Jack Ma reappears at Alibaba event", "MA"),
+                       ("Apple v. Samsung patent ruling", "V"),
+                       ("The dis track dropped Friday and streaming numbers jumped", "DIS")):
+        assert sym not in score_items([mk(title, sym)], syms)[0].symbols, title
+    for title in ("Caterpillar posts record quarter on mining demand",
+                  "CAT shares slide after guidance cut",
+                  "Nvidia (NVDA) beats on top and bottom lines"):
+        got = score_items([mk(title, title)], syms)[0].symbols
+        assert got and set(got) <= {"CAT", "NVDA"}, title
+
+
 def test_digest_sections():
     scored = score_items(items(), ["AAPL"])
     md = build_digest(scored, held={"AAPL"}, watched=set())
