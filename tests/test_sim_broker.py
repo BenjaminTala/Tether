@@ -137,6 +137,31 @@ def test_market_order_and_rejections():
         b.set_time(T0 - timedelta(days=1))
 
 
+def test_stop_triggers_only_in_regular_hours_unless_outside_rth():
+    """2026-09-14: sniper's NVDA sim stop filled at 04:18 ET on a pre-market quote (214.81)
+    and swing's XLK at 04:43 ET, while main's real GTC stop on NVDA fired at the 09:30 open
+    at 211.18. IBKR stops do not trigger outside RTH unless outsideRth is set; the sim now
+    behaves the same so shadow P&L is not flattered by prints the broker would ignore."""
+    b = mk()
+    buy(b, 2, 100.2)
+    sell(b, 2, tag="stop", tif="GTC", otype="STP", stop=95.0)
+    b.set_time(datetime(2026, 1, 6, 9, 18, tzinfo=timezone.utc))     # Tuesday 04:18 ET
+    b.mark("AAPL", 93.0)                                              # pre-market print
+    assert [o.client_tag for o in b.open_orders()] == ["stop"]        # rests, as at IBKR
+    b.set_time(datetime(2026, 1, 6, 14, 30, 12, tzinfo=timezone.utc))  # 09:30:12 ET
+    b.mark("AAPL", 93.5)
+    assert not b.open_orders()
+    assert b.fills_since(T0)[-1].price == pytest.approx(93.5)
+    # An order that asks for outside-RTH handling still fires pre-market.
+    b2 = mk()
+    buy(b2, 2, 100.2)
+    b2.place(OrderRequest(client_tag="orth", symbol="AAPL", side="SELL", qty=2, order_type="STP",
+                          stop_price=95.0, tif="GTC", outside_rth=True))
+    b2.set_time(datetime(2026, 1, 6, 9, 18, tzinfo=timezone.utc))
+    b2.mark("AAPL", 93.0)
+    assert not b2.open_orders() and b2.fills_since(T0)[-1].client_tag == "orth"
+
+
 def test_bars_and_quote_snapshot():
     b = mk()
     bars = [Bar(T0 - timedelta(days=i), 100, 101, 99, 100, 1e6) for i in range(40, 0, -1)]

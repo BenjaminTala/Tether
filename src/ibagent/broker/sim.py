@@ -5,7 +5,8 @@ Fill model
            max(limit, bid*(1-slip)); otherwise rests and is re-checked on every mark/quote update.
   MKT      fills immediately at ask/bid with slippage.
   STP      rests; when a mark crosses the stop it fills at min(stop, price) for SELL and
-           max(stop, price) for BUY — gaps hurt, as in reality.
+           max(stop, price) for BUY — gaps hurt, as in reality. Triggers only during regular
+           trading hours unless the order has outside_rth (IBKR's default behaviour).
   STP LMT  on trigger becomes a resting LMT at its limit price.
   DAY orders expire when the simulated date rolls forward; GTC orders persist.
 
@@ -24,7 +25,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ibagent.broker.base import (AccountSnapshot, Bar, Contract, Fill, OrderRequest, OrderStatus, Position, Quote)
 from ibagent.fees import CommissionModel, estimate_commission
-from ibagent.marketclock import add_business_days, utc
+from ibagent.marketclock import add_business_days, is_rth, utc
 
 
 class SimError(RuntimeError):
@@ -219,6 +220,13 @@ class SimBroker:
             elif r.side == "SELL" and lmt <= q.bid:
                 price = max(lmt, q.bid * (1 - slip))
         elif r.order_type in ("STP", "STP LMT") and not o.triggered:
+            # A stop triggers only during the regular session unless the order says
+            # outsideRth, exactly like IBKR's default. 2026-09-14: sniper's NVDA stop filled
+            # at 214.81 on a 04:18 ET pre-market quote (swing's XLK at 04:43 ET) while main's
+            # real GTC stop on the same name fired at the 09:30 open at 211.18 — the shadow
+            # sims were being flattered by prints the broker would never have acted on.
+            if not r.outside_rth and not is_rth(self._now):
+                return
             stop, last = float(r.stop_price), float(q.last)
             hit = last <= stop if r.side == "SELL" else last >= stop
             if hit:
