@@ -1,5 +1,92 @@
 # Live-session learnings
 
+## 2026-09-15 (Tuesday night, engineer) — two sessions, three outages: the PC rebooted mid-session Monday, the Gateway sat logged out through Tuesday's open; a drone maker fired six runs on CAT; shadow stops were filling pre-market
+
+- **No engineer entry for Monday night: the pass did not run** (PC off/rebooting — see
+  below). This entry covers 09-14 and 09-15.
+- **Outage 1, closed: the Gateway the owner started Sunday 23:37 local ended the 48 h
+  Friday-night outage** — all 7 `reconnected, down_minutes: 2900, failed_attempts: 546` at
+  04:39 UTC Monday, 5 h before the open. Monday then opened as lesson 6 predicts: main's NVDA
+  GTC stop fired at 09:30:12 ET at 211.18 (−49.32) and JPM's at 13:42 ET (−9.72) → main's
+  3-losing-trades cooldown to 09-16; sniper's NVDA sim stop (−28.70) put it in the same
+  cooldown; swing's XLK stop −2.39. All 7 weeklies + dailies fired 13:52–14:04 UTC, every
+  one `no_change`. Realized Monday: main −59.04, all-time −171.42 → −184.46 tonight.
+- **Outage 2, new shape: the PC rebooted at 14:17:51 local Monday (19:17 UTC, 15:17 ET)**,
+  43 min before the close. Every journal stops at 19:08–19:13 UTC and resumes at 01:37 UTC
+  (20:37 local) when the tasks came back — so the close, the 16:20 report (it fired at 01:44
+  UTC instead) and the last 43 min of protective checks were unwatched, and the restart
+  `sim_stops_restored` the shadows' stops from book.json (bold XOM, twin XLK; the 09-08 fix
+  doing its job). No watchdog line — it sleeps with the PC, same as 09-09. The report did
+  NOT lead with MISSED because the protective job had run until 15:1x ET — a partial-day
+  gap, exempt by design. The 6 h 20 min between boot and the tasks starting is unexplained
+  from here (logon-triggered tasks + nobody logged in is the obvious reading).
+- **Outage 3, the old shape: the Gateway logged itself out at 21:09 local Monday and
+  stayed out until the owner restarted it at 11:20 local Tuesday.** After the reboot the
+  owner started the Gateway at 20:38:59 local (`launcher.20260914.log`), all 7 reconnected
+  01:43 UTC, then at 02:09 UTC the socket dropped and every variant journaled the
+  "port accepted but the API handshake timed out — LOGGED OUT" text, then **13 hourly
+  `still_down` lines each (03:22 → 15:32 UTC, failed_attempts 11 → 145)** — the 09-12 change's
+  first live use, and exactly the audit trail the 18-hour hole on 09-12 lacked. `launcher.log`
+  shows `IB GATEWAY RESTART` at 11:20:32 local; all 7 `reconnected, down_minutes: 845–847,
+  failed_attempts: 163–164` at 16:21 UTC (12:21 ET). **Tuesday's fleet missed the open by
+  2 h 51 min**: the dailies fired at 12:23–12:28 ET (slots unmarked, as read on 09-13), main
+  and 5 shadows `no_change`; scalper's first event run bought XLE 19 sh @ 65.72 (supply-shock
+  catalyst, sector ETF for fill reliability — lesson 5 applied) and its 1.5×ATR trail
+  ratcheted the stop seven times in 1 h 45 (63.22 → 64.20). The 11:45 local auto-restart hit
+  again at 16:45 UTC (back in 1 min). `jts.ini` was rewritten at 16:09 local today; whether
+  the auto-restart time moved is only observable tomorrow at 11:45 local (16:45 UTC).
+- **BUG (fixed, deployed): the scorer matched tickers case-insensitively.** "AeroVironment
+  Rises 6% as Post-Earnings Recovery Outpaces Drone Group; Ondas Ticks Up, **Red Cat** Barely
+  Budges" (0.7, CAT −4% on the day) fired main, bold, scalper, swing, turtle and twin at
+  17:11–17:18 UTC Monday — six runs on a drone maker; main's triage called it "a ticker
+  collision (Red Cat → CAT)" outright. Same rule tagged "cost of war" as COST (3 of the 400
+  stored items tonight) and would tag "Jack Ma" as MA and "Apple v. Samsung" as V. The
+  ticker now has to appear in upper case; company aliases stay case-blind, and "meta" is
+  added as an alias because headlines call the company Meta (without it four real META
+  items lost their tag in the measurement). Exactly 3 of 400 stored items change, all the
+  Pentagon "cost" ones. Regression test.
+- **BUG (fixed, deployed): shadow sim stops fired on pre-market quotes.** sniper's NVDA stop
+  filled at **08:18 UTC (04:18 ET) at 214.81** and swing's XLK at 08:43 UTC — quotes the
+  news poll pulls around the clock — while main's real GTC stop on the same NVDA fired at
+  the 09:30 open at 211.18. IBKR never triggers a stop outside RTH unless `outsideRth` is
+  set, and the engine never sets it, so the sims were exiting at prices the broker would
+  not have acted on: sniper's exit was $3.63/sh (≈$7) kinder than main's on the same gap,
+  and every future overnight gap would have flattered the A/B the same way. The STP branch
+  now rests while `is_rth(sim.now)` is false (an `outside_rth` order still fires). Test.
+- **The stale-bars fallback held, but it is only as wide as the last successful pass.** At
+  13:47 UTC Monday the history farm was dead for this connection again (AAPL/ABBV/AMZN
+  failed, 47 skipped; scalper's `bars_refresh` `fetched 0` until 18:11 UTC — after the 16:45
+  reconnect, the 4th time: 09-08, 09-11, 09-14 and the 12:45 restart is the only healer).
+  The dailies got 7 rows and the weeklies 12 of ~50 — those are the held + watchlist bars
+  the weekend news polls had cached, refetched fresh at 04:40 UTC Monday (hence no
+  `bars_stale_served` line; nothing stale was served). The universe is only ever fetched by
+  a weekly, so after the 09-11 restart there was no universe to fall back on. Every variant
+  wrote a version of "under-deployment persists because market.json only carries held/
+  watched rows" — for the DAILY that is by design (held | core | watchlist); for Monday's
+  weekly it was the dead farm. Written down, not coded (two changes already tonight):
+  **warm the universe cache in the 16:20 report job**, when the farm is reliably alive, so
+  the next morning's fallback covers the whole whitelist. Top quiet-night candidate.
+- **Event gate, Monday: 20 runs on three headlines, 20 no_change.** "Broadcom vs. Nvidia: 3
+  Key Metrics Point to the Stronger AI Chipmaker to Buy After Earnings" (0.7) fired all 7
+  (13:44–13:59 UTC) and "Broadcom Just Named Its Next Customer to Pass Google: Anthropic.
+  Here's Why That Matters More Than the Earnings Beat." (0.7) fired all 7 (14:41–15:01) —
+  both listicle/explainer commentary on the 12-day-old AVGO print — plus the Red Cat six.
+  Dampener candidates written down: `\d+ key (metrics|reasons|things)`, `here's why`,
+  `(stock|chipmaker) to buy`. Tuesday: sniper took "How a Costco partner's bankruptcy could
+  benefit its biggest rival" at **0.95** (bankruptcy pattern on a Soft rival piece; one
+  instance, noted) and the AVGO CEO reply at 0.65.
+- Fleet after Tuesday's close: bold −29.47, scalper −50.44, twin −65.21, turtle −85.10,
+  swing −90.53, sniper −131.68, main −184.46 (−102.47 vs SPY). Main is core-only (SGOV, VTI)
+  with entries paused to 09-16. OneDrive PermissionError ×4 (main 15:37 + 17:05, scalper
+  19:08, sniper 12:49 UTC Monday) → 35+.
+- **DEPLOYED 22:50 UTC** via `schtasks` from Bash (PowerShell denied again): stop → all 7
+  Ready → start → all 7 Running, heartbeats within 1 s, all 7 `reconnected` by 22:51:04,
+  `sim_stops_restored` on the three shadows with active positions (bold XOM, scalper XLE,
+  twin XLK). Restarting tonight was cheap for once: the Gateway is up, the stale fallback
+  held nothing beyond what the next news poll refetches, and no outage counter was
+  mid-flight. The fleet runs HEAD. sniper logged one `no historical bars for QQQ` at
+  22:51:34 — the farm is flaky again tonight; watch tomorrow's 09:35 ET.
+
 ## 2026-09-13 (Sunday night, engineer) — the Gateway is still dead after 42 h; Monday's open is 11 h away; the scorer finally reads a print that does not say "earnings"
 
 - **ONGOING at 22:40 UTC: IB Gateway has been gone since 04:13 UTC Saturday — 42 h, no
