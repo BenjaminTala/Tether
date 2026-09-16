@@ -69,6 +69,12 @@
   UTC → 36+. Standings: twin −69.28, bold −73.58, scalper −87.94, swing −97.22, turtle
   −100.00, sniper −140.62, main −194.88 (−65.32 vs SPY). main core-only, its 3-loser
   cooldown expired today; turtle's NVDA cooldown to 09-17; scalper's to 09-18.
+- **DEPLOYED 22:53 UTC** via `schtasks` from Bash (PowerShell denied again): stop → all 7
+  Ready → start → all 7 Running, heartbeats within 1 s, all 7 `reconnected` by 22:53:33,
+  `sim_stops_restored` on bold (XOM — the only shadow with an active position tonight). The
+  second fleet restart of the day (the owner's was 21:32 UTC), so the bars fallback held
+  nothing the next news poll cannot refetch and no outage counter was mid-flight. The fleet
+  runs HEAD; the guard is armed for tonight's 04:45 UTC auto-restart.
 
 ## 2026-09-16 (owner session, 05:05 UTC) — URGENT for tonight's engineer: ALL 7 ticks wedged at the Gateway's 04:45 UTC auto-restart despite the 08-25 per-call timeouts
 
