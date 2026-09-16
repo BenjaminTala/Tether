@@ -161,11 +161,17 @@ def run_cycle(m: Mandate, book: Book, journal: Journal, alerter: Alerter, runner
         journal.record("rejection", {"symbol": r.symbol, "what": r.what, "reason": r.reason})
 
     report = executor.execute_plan(plan)
+    # The summary is the line the model actually quotes back: on 2026-09-16 scalper read
+    # "rebalance; 0/0 orders filled" for its TMO proposal and concluded "appears not to have
+    # filled" although the REJECTED line sat two lines above it. Name the refusal here too.
+    refused = ("; " + ", ".join(f"{r.symbol} REJECTED by the engine ({r.reason})"
+                                for r in plan.rejections)[:300]) if plan.rejections else ""
     journal.record("run_summary", {
         "run_type": run_type,
         "result": (f"held: {reason}" if held else
                    f"{decision.action}; {report.filled}/{len(plan.orders)} orders filled, "
-                   f"{len(report.stops_placed)} stops placed, {len(report.stops_replaced)} replaced"),
+                   f"{len(report.stops_placed)} stops placed, {len(report.stops_replaced)} replaced"
+                   + refused),
         "realized": report.realized_pnl, "errors": report.errors})
     prune_bundles(runs_root)
     return CycleResult(run_type=run_type, decision=decision, held=held, reason=reason,

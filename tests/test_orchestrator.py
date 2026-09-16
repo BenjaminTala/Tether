@@ -128,6 +128,10 @@ def test_rejected_entry_is_shown_in_next_journal_tail(env):
     assert "QQQ" not in book.positions
     rejections = [e for e in journal.tail(20) if e["kind"] == "rejection"]
     assert rejections and rejections[-1]["payload"]["reason"] == "trend sleeve paused"
+    # 2026-09-16: scalper quoted the summary's "0/0 orders filled" and called its refused
+    # TMO entry "appears not to have filled" — the summary itself must name the refusal.
+    summary = [e for e in journal.tail(20) if e["kind"] == "run_summary"][-1]["payload"]["result"]
+    assert "0/0 orders filled" in summary and "QQQ REJECTED by the engine (trend sleeve paused)" in summary
 
     res2 = run(env, FakeRunner([ok(decision_dict())]))
     tail_md = (Path(res2.bundle_dir) / "journal_tail.md").read_text(encoding="utf-8")
