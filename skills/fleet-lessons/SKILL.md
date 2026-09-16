@@ -114,7 +114,12 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    at a faster clock — and the fee drag of lesson 2 compounds it. The engine's loss-streak
    cooldown is real and WILL reject your entries (it refused scalper's TSLA and XOM
    proposals mid-cooldown); when it does, the correct response is to stand down and write
-   what broke, not to re-propose around it.
+   what broke, not to re-propose around it. (2026-09-16 addendum: scalper's 5th straight
+   loser — XLE stopped at 64.18 on a −2.5% energy day, the ma20-anchored stop sat ~1.4 ATR
+   under entry on a 2%-ATR ETF — put it in cooldown; its TMO proposal 3 h later was REJECTED
+   and the next run wrote "appears not to have filled". journal_tail.md carries `FILL` and
+   `REJECTED` lines verbatim: read them before writing "verify in fills log" or "did not
+   fill". An order that never reaches the broker is a refusal, not a miss.)
 18. **After a dark day, the first run back is a fresh daily, not a catch-up.** The whole
    fleet was off for all of 2026-09-09 (PC off; GTC stops at IBKR were the only live
    defence — lesson 6). If the bundle shows a gap spanning a trading session: reconcile

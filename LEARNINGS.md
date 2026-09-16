@@ -1,5 +1,75 @@
 # Live-session learnings
 
+## 2026-09-16 (Wednesday night, engineer) — a whole-tick stall guard for the 04:45 UTC wedge; the model was handed its FILL and REJECTED lines and quoted the run summary instead; the Gateway and the fleet were both restarted at 16:32 local
+
+- **The wedge, read from every log on the machine.** Heartbeats froze 04:33–04:40 UTC on all
+  7 (watchdog: `down` 04:30 "last beat 10 min ago", `recovered` 04:35, `down` 04:55 "last beat
+  14 min ago", `recovered` 05:10 after the owner's restart — all 7 `reconnected` 05:05:03–04,
+  `sim_stops_restored` on bold/scalper/twin). `launcher.20260915.log` puts the Gateway's
+  auto-restart at **23:47:58 local = 04:47:58 UTC — 7–14 min AFTER the ticks froze**, so
+  "the restart tears sockets down early" is not what the logs say; the freeze came first,
+  during the slow loop's 5-minute news poll (quotes for held|watched, then `_bars` for the
+  day-move reference — sniper's 02:05 `no historical bars for META` shows that path fetching
+  bars pre-dawn). Not one `IB request … timed out` warning on any variant, so whatever
+  blocked was not inside a `_timed` wrapper, or the event loop's timer never ran. That is
+  the limit of what the journal can say — the missing fact is the stack, and tonight's fix
+  is built to capture it.
+- **Fix (deployed): `TickGuard`, a whole-tick stall guard.** The tick marks progress at every
+  stage (telegram, connect, fill_sync, each quote / bars / bars_refresh symbol, news_poll,
+  news_score, reconcile, breakers, jobs, and every 2-s fill poll inside the executor); a
+  daemon thread that sees no mark for the allowance — `max(3 × loop interval, 300 s)` =
+  300 s in RTH, 900 s off-hours; a model run gets `timeout × attempts + 300 s` for its own
+  stage — journals **`tick_aborted` with the stage, the elapsed seconds and the tick
+  thread's stack** (the evidence the 09-16 journal lacked), sends one critical alert (bounded
+  to 15 s so a hung network cannot keep a wedged process alive) and `os._exit(3)`s. Task
+  Scheduler's restart-on-failure (verified in the task XML: Count 999, interval 1 min on
+  main, 2 min on the shadows) brings a fresh process that reconnects — the owner's 05:07
+  restart, automated. Worst legitimate stages measured against the 300-s floor: connect
+  3 attempts ≈ 117 s, news poll 9 feeds × 20 s = 180 s, one order 90 s + retry 90 s with a
+  mark every 2 s. Tests: a wedged call is aborted once with its function name in the stack;
+  marks, the model allowance and disarm suppress it. First live test: **tonight 04:45 UTC**
+  — if the fleet wedges again the journals will hold seven `tick_aborted` lines with stacks
+  and seven restarts within 2 min; if the auto-restart passes clean, nothing fires.
+- **Fix (deployed): the run summary names the engine's refusals.** scalper's XLE sim stop
+  filled 15:13:46 UTC at 64.18 (−31.37, its **5th loser → cooldown to 09-18**); at 15:41,
+  16:12 and 16:42 the model wrote "XLE is gone … verify in fills log / please confirm" three
+  runs running, and after its 18:43 TMO proposal was `REJECTED entry TMO: entries paused
+  until 2026-09-18` it wrote at 19:44 "appears not to have filled". Rebuilding the 40-entry
+  tail from the journal: the `FILL SELL 19.0 XLE @ 64.1772 realized -31.37 (protective stop
+  fired)` line WAS in journal_tail.md at 15:41 and the `REJECTED` line WAS there at 19:44
+  (the 09-12 fix worked on its first live use) — the model quotes the run_summary line
+  ("rebalance; 0/0 orders filled") and skims the rest. That line now ends with
+  `; TMO REJECTED by the engine (entries paused until …)`. Fleet lesson 17 gets the addendum.
+- **The Gateway and the fleet were both restarted by the owner at 16:32–16:33 local
+  (21:32–21:33 UTC).** All 7 tasks show Last Run Time 16:32:47; `launcher.log` rotated and
+  `jts.ini` was rewritten at 16:33; bold's `sim_stops_restored` at 21:33:19, all 7
+  `connection refused` at 21:33:37, all 7 `reconnected, down_minutes: 5, failed_attempts: 1`
+  at 21:38–39. Also: **the 11:45 AM auto-restart still fired today** (`launcher.log` head
+  11:45:04; Socket disconnect 16:45 UTC on bold/scalper/turtle/twin, all 7 back by 16:46),
+  so yesterday's 16:09 setting change had not taken; whether today's 16:33 one did is
+  observable tomorrow at 16:45 UTC (should NOT fire) and tonight at 04:45 (should).
+- Session (FOMC hike day, SPY −0.9%): all 7 dailies 13:51–13:53 UTC, six `no_change`; **twin
+  sold XLK** (6 sh @ 185.11, −24.47) on its own written invalidation ("two closes below ma20")
+  — the first model-decided exit in the fleet, done in the daily with a limit that filled at
+  the open. scalper ran 12 event scans; the first four had `bars_refresh fetched 0, failed
+  SGOV/VTI/XLE` (farm dead for the connection from the 00:05 fill until the 16:45 reconnect
+  — 5th time; then 23/23 at 17:10). ORCL commentary fired **7 runs, 7 no_change, six days
+  after the print**: "Oracle's Q1 Results Prove the AI Trade Is Going Nowhere" (0.8 — the
+  09-13 `results` shape; main, scalper, sniper, swing) and "Oracle Stock Sank After Earnings
+  -- Is It a Buy?" (0.7; bold, turtle, twin). Dampener candidates measured on main's 400
+  stored items: `is it a buy|should you buy`, `(stocks?|chipmakers?) to buy`, `\d+ (key
+  )?(metrics|reasons|things|takeaways)`, `here's why` hit 7 of 400, only the ORCL one at
+  ≥ 0.7. Coded with a test (15 lines) and then **dropped to stay inside the 150-line
+  budget** — top quiet-night item, next to the universe warm-up. sniper's CRM 0.65 trigger
+  ("Tech's top CEOs clash … at Salesforce event") is its lower gate working; no_change.
+- Noise as documented: 00:05 UTC cache fill failed its first 3 symbols on all 7; V (a new
+  watchlist name) returned no bars on all 7 at 14:16–14:20; scalper and swing took a 30-s
+  quote timeout at 12:19 UTC and were back at 12:24 (the 08-25 per-call timeout doing its
+  job — note it DID journal, unlike the 04:33 wedge); turtle OneDrive PermissionError 12:59
+  UTC → 36+. Standings: twin −69.28, bold −73.58, scalper −87.94, swing −97.22, turtle
+  −100.00, sniper −140.62, main −194.88 (−65.32 vs SPY). main core-only, its 3-loser
+  cooldown expired today; turtle's NVDA cooldown to 09-17; scalper's to 09-18.
+
 ## 2026-09-16 (owner session, 05:05 UTC) — URGENT for tonight's engineer: ALL 7 ticks wedged at the Gateway's 04:45 UTC auto-restart despite the 08-25 per-call timeouts
 
 - All 7 heartbeats froze between 04:33 and 04:40 UTC (main 04:40:48, twin 04:33:41 — the
