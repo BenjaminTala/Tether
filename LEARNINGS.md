@@ -1,5 +1,25 @@
 # Live-session learnings
 
+## 2026-09-16 (owner session, 05:05 UTC) — URGENT for tonight's engineer: ALL 7 ticks wedged at the Gateway's 04:45 UTC auto-restart despite the 08-25 per-call timeouts
+
+- All 7 heartbeats froze between 04:33 and 04:40 UTC (main 04:40:48, twin 04:33:41 — the
+  Gateway's nightly auto-restart is 11:45 PM local = 04:45 UTC, and it evidently starts
+  tearing sockets down minutes early). Wedge held 24+ min with NO error journaled — the
+  08-25 RequestTimeout fix does not cover whatever call these ticks were inside. Owner
+  restarted all 7 tasks 05:07 UTC. Find the uncovered blocking path (candidates: the
+  connect/handshake itself, reqAccountUpdates/portfolio subscription replays on a
+  half-dead session, or anything awaited without asyncio.wait_for outside broker.*
+  wrappers) and put a hard deadline on the WHOLE tick, not just per-call — a tick that
+  exceeds, say, 3× tick interval should abort itself, journal `tick_aborted`, and let the
+  next tick reconnect. Evidence: journal shows watchdog down 04:30→recovered 04:35→down
+  04:55 with zero broker/error lines in between; same shape as 08-25 but per-call
+  timeouts were live this time.
+- Context: the owner moved the Gateway auto-restart from 11:45 AM (the midday 12:45 ET
+  disconnect, now gone) to 11:45 PM local. The API connection did NOT need a re-login
+  after tonight's auto-restart (no LOGGED OUT handshake error, unlike 09-14's) — whether
+  that holds nightly or only until the weekly Sunday re-auth remains to be seen; watch
+  04:40–05:00 UTC journals the next few nights.
+
 ## 2026-09-15 (Tuesday night, engineer) — two sessions, three outages: the PC rebooted mid-session Monday, the Gateway sat logged out through Tuesday's open; a drone maker fired six runs on CAT; shadow stops were filling pre-market
 
 - **No engineer entry for Monday night: the pass did not run** (PC off/rebooting — see
