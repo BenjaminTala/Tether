@@ -15,9 +15,14 @@ exception in a tick is journaled and alerted, never fatal. Ctrl+C / SIGTERM exit
 """
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import signal
+import sys
+import threading
 import time
+import traceback
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -48,6 +53,65 @@ BARS_FAIL_STREAK = 3          # consecutive bar failures in one pass before skip
 BARS_STALE_MAX_DAYS = 5       # serve yesterday's cached bars while the farm is down, up to this age
 PROTECTIVE_MIN_SPACING_S = 900
 STATUS_UPDATE_SPACING_S = 3600          # intraday Telegram status every hour during RTH
+TICK_STALL_MIN_S = 300                  # a tick with no progress for this long is wedged
+
+
+class TickGuard:
+    """Whole-tick stall guard. Per-call timeouts (2026-08-25) cover every broker request we
+    know about, yet on 2026-09-16 all 7 ticks froze 04:33-04:40 UTC for 24+ min with NO error
+    line. The tick marks progress per stage; a daemon thread that sees no mark for the
+    allowance calls `on_stall(stage, elapsed, stack)` with the tick thread's stack."""
+
+    def __init__(self, on_stall: Callable[[str, float, str], None], poll_s: float = 5.0):
+        self._on_stall, self._poll_s = on_stall, poll_s
+        self._stage, self._t0, self._allow_s = "", 0.0, 0.0
+        self._armed = self._fired = False
+        self._ident = threading.get_ident()
+
+    def start(self) -> None:
+        self._ident = threading.get_ident()
+        threading.Thread(target=self._watch, name="tick-guard", daemon=True).start()
+
+    def arm(self, allow_s: float, stage: str = "tick") -> None:
+        self._allow_s, self._armed, self._fired = allow_s, True, False
+        self.progress(stage)
+
+    def disarm(self) -> None:
+        self._armed = False
+
+    def progress(self, stage: str) -> None:
+        self._stage, self._t0 = stage, time.monotonic()
+
+    @contextlib.contextmanager
+    def allow(self, seconds: float, stage: str):
+        prev, self._allow_s = self._allow_s, max(self._allow_s, seconds)
+        self.progress(stage)
+        try:
+            yield
+        finally:
+            self._allow_s = prev
+            self.progress(f"after {stage}")
+
+    def check(self, now_mono: Optional[float] = None) -> bool:
+        """One poll; True if the stall handler fired. Public so tests need no thread."""
+        if not self._armed or self._fired:
+            return False
+        elapsed = (now_mono if now_mono is not None else time.monotonic()) - self._t0
+        if elapsed <= self._allow_s:
+            return False
+        self._fired = True
+        frame = sys._current_frames().get(self._ident)
+        stack = "".join(traceback.format_stack(frame))[-1500:] if frame else "(no frame)"
+        self._on_stall(self._stage, elapsed, stack)
+        return True
+
+    def _watch(self) -> None:
+        while True:
+            time.sleep(self._poll_s)
+            try:
+                self.check()
+            except Exception:                            # the guard must never take the tick down
+                pass
 
 
 @dataclass
@@ -123,8 +187,12 @@ class Supervisor:
         self.journal = Journal(mandate.journal.dir)
         self.alerter = alerter or build_alerter(mandate.alerts)
         self.book = Book.load(self.data_dir / "book.json")
+        self.guard = TickGuard(self._tick_stalled)
+        self._stall_exit: Callable[[int], None] = os._exit   # tests replace; never returns
+        # The executor polls fills for up to 90 s per order on its own clock: that is progress.
         self.executor = Executor(mandate, broker, self.book, self.journal, self.alerter,
-                                 sleeper=sleeper, now_fn=now_fn)
+                                 sleeper=lambda s: (self.guard.progress("order_wait"), sleeper(s)),
+                                 now_fn=now_fn)
         self.runner: LLMRunner = runner or ClaudeCodeRunner(mandate.llm, decision_json_schema_text())
         self.qa_runner: Optional[LLMRunner] = None       # tests inject; production builds schema-less
         self.state = ScheduleState.load(self.data_dir / "schedule_state.json")
@@ -187,17 +255,19 @@ class Supervisor:
                 pass
         self.alerter.info("supervisor started",
                           f"mode={self.m.mode} profile={self.m.universe.profile}")
+        self.guard.start()
         while not self._stop:
             now = self.now_fn()
+            interval = self.m.cadence.fast_loop_seconds if is_rth(now) \
+                else self.m.cadence.slow_loop_seconds
+            self.guard.arm(max(3 * interval, TICK_STALL_MIN_S))
             try:
                 self.tick(now)
             except Exception as exc:                      # a tick must never kill the process
-                import traceback
                 self.journal.record("error", {"where": "tick", "err": repr(exc),
                                               "trace": traceback.format_exc()[-1500:]})
                 self.alerter.critical("supervisor tick failed", repr(exc)[:500])
-            interval = self.m.cadence.fast_loop_seconds if is_rth(now) \
-                else self.m.cadence.slow_loop_seconds
+            self.guard.disarm()
             self.sleep(interval)
         self.alerter.info("supervisor stopped", "clean shutdown")
 
@@ -221,11 +291,14 @@ class Supervisor:
         now = utc(now)
         self._heartbeat(now)
         self.sync_capital()
+        self.guard.progress("telegram")
         self._telegram_job(now)                # owner can always reach the agent, even killed
         if self._kill_engaged():
             return
+        self.guard.progress("connect")
         if not self._ensure_connected():
             return
+        self.guard.progress("fill_sync")
         self._sync_external_fills(now)
 
         held = set(self.book.positions)
@@ -244,12 +317,30 @@ class Supervisor:
         elif held:
             self.journal.record("warning", {"where": "tick", "msg": "missing quotes for held symbols"})
 
+        self.guard.progress("reconcile")
         self._reconcile()
         if snap is not None:
+            self.guard.progress("breakers")
             self._breakers(snap, quotes, now)
+        self.guard.progress("jobs")
         self._jobs(now, quotes)
 
     # ------------------------------------------------------------------ plumbing
+    def _tick_stalled(self, stage: str, elapsed: float, stack: str) -> None:
+        """No progress for the whole allowance: journal WHERE the tick sits (what the 09-16 wedge
+        left no trace of), alert, exit non-zero so Task Scheduler's restart-on-failure recovers."""
+        try:
+            self.journal.record("tick_aborted", {"stage": stage, "elapsed_s": round(elapsed),
+                                                 "stack": stack})
+        except Exception:
+            pass
+        t = threading.Thread(target=lambda: self.alerter.critical(
+            "tick wedged - restarting", f"no progress for {elapsed:.0f}s in '{stage}'; "
+            "exiting so the scheduler restarts me"), daemon=True)
+        t.start()
+        t.join(15)                        # a hung network must not keep a wedged process alive
+        self._stall_exit(3)
+
     def _heartbeat(self, now: datetime) -> None:
         self.heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
         self.heartbeat_path.write_text(now.isoformat(timespec="seconds"), encoding="utf-8")
@@ -324,6 +415,7 @@ class Supervisor:
     def _quotes(self, symbols: Set[str]) -> Dict[str, Quote]:
         out: Dict[str, Quote] = {}
         for sym in sorted(symbols):
+            self.guard.progress(f"quote {sym}")
             try:
                 out[sym] = self.broker.quote(self._contract(sym))
             except Exception as exc:
@@ -377,6 +469,7 @@ class Supervisor:
                         self.journal.record("warning", {"where": "bars", "msg": "history unavailable; rest of "
                                                         "pass skipped", "skipped": len(skipped)})
                     continue
+                self.guard.progress(f"bars {sym}")
                 try:
                     self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
                 except Exception as exc:
@@ -427,6 +520,7 @@ class Supervisor:
             if streak >= BARS_FAIL_STREAK:
                 unreached += 1
                 continue
+            self.guard.progress(f"bars_refresh {sym}")
             try:
                 self._bars_cache[sym] = self.broker.daily_bars(self._contract(sym), BARS_FOR_STATS)
             except Exception:
@@ -604,7 +698,9 @@ class Supervisor:
     def _news_job(self, now: datetime, quotes: Dict[str, Quote]) -> None:
         self.state.last_news_poll_ts = now.timestamp()
         self.state.save(self.data_dir / "schedule_state.json")
+        self.guard.progress("news_poll")
         fresh = news_poll(self.feeds, self.news.seen, now=now)
+        self.guard.progress("news_score")
         self.news.add(fresh)
         self.news.save()
         universe = [i.symbol for i in self.m.universe.active.instruments]
@@ -733,11 +829,14 @@ class Supervisor:
         atrs = {s: v.atr for s, v in stats.items() if v.atr}
         held = set(self.book.positions)
         digest = build_digest(self._scored_recent, held, set(self.state.watchlist))
-        result = run_cycle(self.m, self.book, self.journal, self.alerter, self.runner,
-                           self.executor, quotes, atrs, stats, digest, run_type, now,
-                           self.llm_state_path, event_note=event_note,
-                           skills_dir=self.skills_dir,
-                           kill_switch=Path(self.m.kill_switch.file).exists())
+        # A model run legitimately takes timeout x attempts (sniper 2026-09-11): allow it.
+        budget = self.m.llm.timeout_seconds[run_type] * (1 + self.m.llm.retries_on_invalid) + TICK_STALL_MIN_S
+        with self.guard.allow(budget, f"model {run_type}"):
+            result = run_cycle(self.m, self.book, self.journal, self.alerter, self.runner,
+                               self.executor, quotes, atrs, stats, digest, run_type, now,
+                               self.llm_state_path, event_note=event_note,
+                               skills_dir=self.skills_dir,
+                               kill_switch=Path(self.m.kill_switch.file).exists())
         if not result.held and result.decision.watchlist:
             # The watchlist is untrusted model text and the engine QUOTES it every news
             # poll: main's 2026-09-03 15:50 event decision listed "HPE-VIA-ORCL:NONE" and

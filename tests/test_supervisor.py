@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -741,3 +743,41 @@ def test_usage_limited_event_gives_the_gate_slot_back(env, monkeypatch):
     sup.state.last_news_poll_ts = 0.0
     sup._news_job(clock.now + timedelta(minutes=5), {})
     assert len(sup.runner.requests) == 1                             # no second model run
+
+
+def _wedged_broker_call(seconds):
+    time.sleep(seconds)                                  # stands in for a call nothing wraps
+
+
+def test_tick_guard_aborts_a_wedged_tick_and_journals_the_blocking_stack(env):
+    """2026-09-16: all 7 ticks froze 04:33-04:40 UTC for 24+ min with NO error line — the
+    08-25 per-call timeouts did not cover whatever they were inside. The guard must fire once
+    the allowance lapses, journal the stage + the tick thread's stack, and exit non-zero."""
+    m, broker, sup, clock, tmp = env
+    exits = []
+    sup._stall_exit = exits.append
+    sup.guard.arm(0.05, "tick")
+    sup.guard.progress("quote SPY")
+    poll = threading.Timer(0.15, sup.guard.check)
+    poll.start()
+    _wedged_broker_call(0.4)
+    poll.join()
+    assert exits == [3]
+    (p,) = [e["payload"] for e in _journal_kinds(tmp, "tick_aborted")]   # exactly one line
+    assert p["stage"] == "quote SPY" and p["elapsed_s"] >= 0
+    assert "_wedged_broker_call" in p["stack"]           # the evidence the 09-16 journal lacked
+    assert sup.guard.check() is False                    # fires once, never twice
+
+
+def test_tick_guard_respects_progress_model_allowance_and_disarm(env):
+    m, broker, sup, clock, tmp = env
+    exits = []
+    sup._stall_exit = exits.append
+    sup.guard.arm(0.1, "tick")
+    sup.guard.progress("bars MSFT")                       # a mark resets the clock
+    assert sup.guard.check(time.monotonic() + 0.05) is False
+    with sup.guard.allow(10.0, "model daily"):           # a model run may legitimately take long
+        assert sup.guard.check(time.monotonic() + 5.0) is False
+    sup.guard.disarm()
+    assert sup.guard.check(time.monotonic() + 100.0) is False and exits == []
+
