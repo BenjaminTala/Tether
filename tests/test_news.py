@@ -114,6 +114,8 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
            "Squawk", "l11"),
         mk("Before You Chase Salesforce's Rally, Take a Closer Look at Its Latest Earnings "
            "Beat", "l12"),
+        # 2026-09-16: a "should I buy" column fired bold, turtle and twin six days after the print.
+        mk("Oracle Stock Sank After Earnings -- Is It a Buy?", "l14"),
     ]
     scored = score_items(previews, ["NVDA", "AVGO", "HD", "ORCL", "AAPL", "CRM"])
     for s in scored:

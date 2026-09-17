@@ -80,7 +80,12 @@ PREVIEW_COMMENTARY = re.compile(
     # headline is market-wide colour that names whatever is on the calendar; never a
     # single-stock event.
     r"|\bfutures (rise|fall|slip|climb|gain|drop|edge|dip|point|rally|slide|steady|flat|mixed"
-    r"|higher|lower)\b",
+    r"|higher|lower)\b"
+    # 2026-09-16: "Oracle Stock Sank After Earnings -- Is It a Buy?" (0.7) fired bold, turtle
+    # and twin six days after the print, 3 no_change. A title that asks the reader whether
+    # to buy is an opinion column about a move already made. Measured on main's store that
+    # night: the only gate-level item these shapes touch.
+    r"|\bis it a buy\b|\bshould you buy\b|\b(stocks?|chipmakers?) to buy\b",
     re.I,
 )
 
