@@ -1,6 +1,6 @@
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -645,6 +645,37 @@ def test_model_runs_wait_for_the_order_window(md, tmp_path):
     assert not sup._orders_can_fill(clock.now)
     sup.tick(clock.now)
     assert sup.state.last_intraday_ts == 0.0
+
+
+def test_intraday_scan_rests_while_entries_are_paused_and_nothing_is_held(md, tmp_path):
+    """2026-09-17: scalper sat in its 5-loser cooldown (entries paused until 09-18) holding
+    only core, and ran 13 intraday scans that could neither enter nor manage anything. The
+    scan rests (one journal line per day) until the pause lifts or a non-core position exists."""
+    md["llm"]["sandbox"]["runs_root"] = str(tmp_path / "runs")
+    md["journal"]["dir"] = str(tmp_path / "journal")
+    md["kill_switch"]["file"] = str(tmp_path / "KILL")
+    md["cadence"]["intraday_minutes"] = 30
+    m = mandate_from_dict(md)
+    broker = SimBroker(SimConfig(initial_cash=1000.0))
+    broker.connect()
+    broker.set_time(NOW)
+    clock = Clock(datetime(2026, 8, 12, 14, 0, tzinfo=timezone.utc))     # 10:00 ET, window open
+    sup = Supervisor(m, broker, runner=FakeRunner([]), data_dir=tmp_path, alerter=Alerter([]),
+                     now_fn=clock, sleeper=lambda s: None, feeds=[],
+                     skills_dir=tmp_path / "no-skills")
+    sup.book.pause_entries(date(2026, 8, 13), "5 losing trades in a row (cooldown)")
+
+    sup.tick(clock.now)
+    clock.now += timedelta(minutes=31)
+    sup.tick(clock.now)
+    assert sup.state.last_intraday_ts == 0.0                 # no scan consumed
+    skipped = [e for e in sup.journal.tail(50) if e["kind"] == "intraday_skipped"]
+    assert len(skipped) == 1 and "2026-08-13" in skipped[0]["payload"]["reason"]   # once per day
+
+    clock.now = datetime(2026, 8, 14, 14, 0, tzinfo=timezone.utc)        # pause lifted
+    sup.tick(clock.now)
+    assert sup.state.last_intraday_ts == clock.now.timestamp()
+
 
 def _install_skills(tmp):
     d = tmp / "skills" / "position-sizing"

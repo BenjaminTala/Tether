@@ -210,6 +210,7 @@ class Supervisor:
         self._bars_stale_logged: frozenset = frozenset()
         self._conn_down_since: Optional[datetime] = None
         self._conn_fail_count: int = 0
+        self._intraday_idle_day = None          # day the "intraday_skipped" line was journaled
         self._conn_last_remind: Optional[datetime] = None
         self.sync_capital()
 
@@ -628,7 +629,20 @@ class Supervisor:
         # While backed off, decision runs wait instead of burning slots on guaranteed HOLDs.
         llm_ready = now.timestamp() >= self.state.llm_retry_after_ts
 
+        # A scan with entries paused and nothing but core on the book can neither enter nor
+        # manage: on 2026-09-17 scalper (5-loser cooldown to 09-18, holding SGOV+VTI only)
+        # ran 13 scans, every one "cooldown is binding ... no trend/spec positions" no_change.
+        # The daily run still fires; a held non-core position keeps the scans on (exits and
+        # stop management are never gated).
         im = self.m.cadence.intraday_minutes
+        if im > 0 and is_trading_day(today) and self.book.entries_paused(today) \
+                and not any(p.sleeve != "core" and p.qty > 0 for p in self.book.positions.values()):
+            if self._intraday_idle_day != today:
+                self._intraday_idle_day = today
+                self.journal.record("intraday_skipped", {
+                    "reason": f"entries paused until {self.book.entries_paused_until} "
+                              f"({self.book.entries_paused_reason}); no non-core position to manage"})
+            im = 0
         if im > 0 and is_trading_day(today) and self._orders_can_fill(now) and llm_ready \
                 and now.timestamp() - self.state.last_intraday_ts >= im * 60:
             self.state.last_intraday_ts = now.timestamp()
