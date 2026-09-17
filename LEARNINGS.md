@@ -1,5 +1,47 @@
 # Live-session learnings
 
+## 2026-09-17 (Thursday night, engineer) — a quiet session; the stall guard went untested because the Gateway never restarted at 04:45 UTC — it restarted at 11:45 AM local again, mid-session; scalper spent 13 model runs inside a cooldown
+
+- **The Gateway's auto-restart is still set to 11:45 AM local (16:45 UTC = 12:45 ET).**
+  `launcher.log` opens `2026-09-17 11:45:05 IB GATEWAY RESTART … Daily auto-restart is
+  enabled`; all 7 journaled `Socket disconnect` 16:45:00–58 UTC and `reconnected`
+  16:46:05–58 (main's tick error was `fills_since` → ConnectionError, recovered next tick).
+  Nothing at all between 22:54 UTC 09-16 and 12:20 UTC 09-17 — no disconnect at 04:45, no
+  `tick_aborted`. So the owner's 09-15 and 09-16 setting changes did not stick (third day),
+  the fleet loses ~1 min of quotes at 12:45 ET every session, and **TickGuard has not had its
+  live test**: last night was simply calm. The wedge of 09-16 preceded that night's restart
+  by 7–14 min, so its cause may recur on any night regardless of the setting.
+- **Fix (deployed): the intraday scan rests while entries are paused and only core is held.**
+  scalper (5-loser cooldown, `entries_paused_until 2026-09-18` inclusive; book SGOV + VTI)
+  ran 13 scans 13:39–19:44 UTC, each `no_change`, each opening with "the cooldown is binding
+  … no trend/spec positions, no stops to tighten"; 9 more on 09-16 after the 15:13 XLE stop.
+  `risk.plan_orders` refuses every entry under the pause, so those runs could not produce an
+  order. One `intraday_skipped` journal line per day names the reason; the daily run is
+  untouched and a held non-core position keeps scans on (exits never gated). The good news
+  inside the waste: scalper did NOT re-propose once today — it quoted the REJECTED line and
+  stood down, which is lesson 17's addendum and last night's run-summary fix working.
+  Tomorrow (09-18, still paused) expect one `intraday_skipped` and a daily, nothing else.
+- **Fix (deployed): "is it a buy?" columns halved** — last night's dropped dampener, narrowed
+  to the three buy-advice shapes that match what fired (bold, turtle, twin on the ORCL column,
+  09-16). Tonight's store has nothing at gate level it touches; listicle shapes left alone.
+- Session (VTI +1.1%): 7 dailies 13:50–13:52 UTC, all `no_change`, zero orders,
+  zero news-gate event runs on any variant (one item ≥ 0.6 with a whitelisted symbol in the
+  whole store: "Chevron CEO sounds the alarm on global oil supplies", 0.65). Books are
+  core-only except bold's XOM (stop 160.36, within 3%). Standings (all-time): twin −42.70,
+  turtle −61.30, bold −62.61, swing −77.87, scalper −84.13, sniper −117.40, main −167.77
+  (−148.92 vs SPY). The spread is mostly core weight on a +1% day, not skill.
+- Noise as documented: 30-s quote timeouts → reconnect within 5 min on turtle 12:20 UTC and
+  swing + twin 21:09 UTC (per-call timeout doing its job); OneDrive PermissionError on swing
+  16:07 and twin 17:32 UTC (→ 38+); scalper's 13:38 `bars_refresh` had `today: 0` (09:38 ET,
+  IB has no daily bar yet — its scan window opens at 09:35; all later refreshes 13–16/16).
+  No 00:05 UTC cache-fill failures last night, for once.
+- **DEPLOYED 22:44 UTC** via `schtasks`: end all 7 → 0 Running → run all 7 → all Running,
+  heartbeats 22:44:19–20, all 7 `reconnected` 22:44:22–23, bold `sim_stops_restored` (XOM).
+- Not done, on purpose: universe warm-up after a restart (still the top quiet-night item —
+  needs more than tonight's remaining budget to do with a test); no shadow knob changes
+  (every variant idle or in cooldown — no results to argue from); no fleet-lessons edit
+  (no new model-behaviour evidence today).
+
 ## 2026-09-16 (Wednesday night, engineer) — a whole-tick stall guard for the 04:45 UTC wedge; the model was handed its FILL and REJECTED lines and quoted the run summary instead; the Gateway and the fleet were both restarted at 16:32 local
 
 - **The wedge, read from every log on the machine.** Heartbeats froze 04:33–04:40 UTC on all
