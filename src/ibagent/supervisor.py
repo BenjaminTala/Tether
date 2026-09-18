@@ -206,7 +206,8 @@ class Supervisor:
         self._bars_cache: Dict[str, List[Bar]] = {}
         self._bars_cache_day: str = ""
         self._bars_warned: Set[str] = set()
-        self._bars_stale: Dict[str, List[Bar]] = {}       # previous days' bars, the fallback
+        self._bars_path = self.data_dir / "bars_cache.json"
+        self._bars_stale: Dict[str, List[Bar]] = self._load_bars()   # earlier bars, the fallback
         self._bars_stale_logged: frozenset = frozenset()
         self._conn_down_since: Optional[datetime] = None
         self._conn_fail_count: int = 0
@@ -447,7 +448,7 @@ class Supervisor:
             self._bars_stale_logged = frozenset()
         out: Dict[str, List[Bar]] = {}
         stale_served: List[str] = []
-        streak = 0
+        streak = fetched = 0
         tripped = False
         for i, sym in enumerate(symbols):
             if sym not in self._bars_cache:
@@ -480,13 +481,15 @@ class Supervisor:
                         self._bars_warned.add(sym)
                         self.journal.record("warning", {"where": "bars", "symbol": sym, "err": str(exc)})
                     continue
-                streak = 0
+                streak, fetched = 0, fetched + 1
                 if stale_served and stale_served[-1] == sym:
                     stale_served.pop()
                 if sym in self._bars_warned:
                     self._bars_warned.discard(sym)
                     self.journal.record("broker", {"event": "bars_recovered", "symbol": sym})
             out[sym] = self._bars_cache[sym]
+        if fetched:
+            self._save_bars()
         served = frozenset(stale_served)
         if served and served != self._bars_stale_logged:
             # One line per distinct set served (not per tick): which symbols run on
@@ -497,6 +500,29 @@ class Supervisor:
                                            "symbols": sorted(served)[:12],
                                            "last_bar": last.isoformat()})
         return out
+
+    def _load_bars(self) -> Dict[str, List[Bar]]:
+        """The fallback survives a restart. 2026-09-17: the fleet was redeployed at 22:44 UTC,
+        the farm answered nothing for the new connections from 22:45 until the Gateway's
+        16:45 UTC restart, and with the in-memory fallback gone all 7 dailies on 09-18 got
+        market.json = {} — the 09-11 failure again, caused by the deploy itself. Age is
+        bounded by the rollover filter in `_bars`; an unreadable file is an empty fallback."""
+        try:
+            raw = json.loads(self._bars_path.read_text(encoding="utf-8"))
+            return {s: [Bar(datetime.fromisoformat(r[0]), *r[1:]) for r in rows]
+                    for s, rows in raw.items() if rows}
+        except Exception:
+            return {}
+
+    def _save_bars(self) -> None:
+        try:
+            rows = {s: [[x.ts.isoformat(), x.open, x.high, x.low, x.close, x.volume] for x in b]
+                    for s, b in {**self._bars_stale, **self._bars_cache}.items()}
+            tmp = self._bars_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(rows), encoding="utf-8")
+            os.replace(tmp, self._bars_path)
+        except Exception as exc:              # a cache that cannot be written is only a cache
+            self.journal.record("warning", {"where": "bars_cache", "err": str(exc)[:200]})
 
     def _refresh_bars(self, symbols: Sequence[str], today_local) -> Dict[str, SymbolStats]:
         """Intraday re-fetch of a focus set so a day-trader run sees today's partial bar.

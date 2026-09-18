@@ -572,6 +572,34 @@ def test_bars_serve_yesterdays_bars_when_the_farm_is_dead_after_rollover(env):
     assert sup._bars(held, clock()) == {}
 
 
+def test_bars_fallback_survives_a_restart(env):
+    """2026-09-17/18: the fleet was redeployed at 22:44 UTC, the farm answered nothing for the
+    new connections from 22:45 until the Gateway's 16:45 UTC restart, and the fallback lived
+    only in the old process: all 7 dailies on 09-18 got market.json = {}. The bars are written
+    to the variant's data dir and a new supervisor starts with them as its fallback."""
+    from ibagent.broker.base import Bar
+    m, broker, sup, clock, tmp = env
+    held = ["JPM", "NVDA", "SGOV", "VTI"]
+    broker.daily_bars = lambda c, d: [Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    assert sorted(sup._bars(held, clock())) == held
+
+    def dead(contract, days):
+        raise RuntimeError(f"no historical bars for {contract.symbol}")
+    broker.daily_bars = dead
+    clock.now = NOW + timedelta(days=1)
+    sup2 = Supervisor(m, broker, runner=FakeRunner([]), data_dir=tmp, alerter=Alerter([]),
+                      now_fn=clock, sleeper=lambda s: None, feeds=[],
+                      skills_dir=tmp / "no-skills")               # the redeploy; farm dead
+    out = sup2._bars(held, clock())
+    assert sorted(out) == held and out["VTI"][-1] == Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)
+
+    (tmp / "bars_cache.json").write_text("{not json", encoding="utf-8")
+    sup3 = Supervisor(m, broker, runner=FakeRunner([]), data_dir=tmp, alerter=Alerter([]),
+                      now_fn=clock, sleeper=lambda s: None, feeds=[],
+                      skills_dir=tmp / "no-skills")
+    assert sup3._bars(held, clock()) == {}                        # unreadable file: fail closed
+
+
 def test_fleet_digest_fires_friday_and_covers_the_whole_week(env, monkeypatch):
     """FLEET.md 'Week of 2026-08-24' said 'decisions 0' for all 7 variants: the digest fired
     MONDAY after the close, so each 'week' held one day (and tail(60) capped the count)."""
