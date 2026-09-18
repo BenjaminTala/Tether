@@ -261,6 +261,12 @@ class IBKRBroker:
         return parse_account_values(vals, self.base_currency, datetime.now(timezone.utc))
 
     def positions(self) -> List[Position]:
+        # ib.positions() reads ib_async's local cache, which a disconnect empties. 2026-09-18:
+        # main's VTI quote timed out at 12:23:22 UTC, `_timed` dropped the link, and the same
+        # tick's reconcile read [] as "SGOV, VTI missing" and froze the engine at 12:23:23 —
+        # the daily ran as a frozen HOLD. No link means no answer, not zero positions.
+        if not self.ib.isConnected():
+            raise BrokerError("positions: not connected")
         out = []
         for p in self.ib.positions(self.account_id):
             if p.contract.secType != "STK" or not p.position:

@@ -99,3 +99,20 @@ def test_daily_bars_uses_short_timeout_and_fails_closed_on_empty():
     with pytest.raises(BrokerError, match="no historical bars"):
         b.daily_bars(Contract(symbol="SPY"), 30)
     assert b.ib.hist_kwargs["timeout"] == 7.0
+
+
+def test_positions_refuse_to_answer_from_a_dropped_link():
+    """2026-09-18: main's VTI quote timed out at 12:23:22 UTC, the adapter dropped the link,
+    and the same tick's reconcile read ib_async's emptied position cache as 'SGOV, VTI
+    missing' — engine frozen one second later, the daily a frozen HOLD. A dead link is
+    missing data (the supervisor journals the error and skips reconcile), never a flat account."""
+    b = _broker()
+    b.ib.isConnected = lambda: not b.ib.disconnected
+    b.ib.positions = lambda account: [SimpleNamespace(
+        contract=SimpleNamespace(secType="STK", symbol="VTI"), position=7.0, avgCost=379.98)]
+    assert [(p.symbol, p.qty) for p in b.positions()] == [("VTI", 7.0)]
+    with pytest.raises(BrokerError, match="timed out"):
+        b.quote(Contract(symbol="VTI"))
+    b.ib.positions = lambda account: []          # what ib_async serves after a disconnect
+    with pytest.raises(BrokerError, match="not connected"):
+        b.positions()
