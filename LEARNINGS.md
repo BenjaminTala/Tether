@@ -1,5 +1,47 @@
 # Live-session learnings
 
+## 2026-09-18 (Friday night, engineer) — MAIN IS FROZEN on a false reconcile mismatch (owner action needed before Monday); last night's deploy blinded all 7 dailies; both causes fixed and deployed
+
+- **main froze itself at 12:23:23 UTC and is still frozen.** Sequence in its journal: VTI
+  quote `IB request timed out after 30s (connection dropped, will reconnect)` at 12:23:22 →
+  `freeze: SGOV book=19.0 broker=0.0 (missing); VTI book=7.0 broker=0.0 (missing)` one second
+  later → `Not connected` on every watched quote → `reconnected` 12:28. `IBKRBroker.positions()`
+  reads ib_async's local cache, which the disconnect empties, so the same tick's reconcile saw
+  a flat account. The 13:53 daily planned as `hold: frozen` (its cooldown had expired 09-16, so
+  this was main's first free daily — it was `no_change` anyway on an empty tape). The same
+  30-s timeout hit turtle, swing and twin on 09-17 harmlessly: shadows reconcile against the
+  sim. Only other freeze on record is bold's 08-28 stop race.
+  **Fix (deployed):** `positions()` raises `BrokerError("positions: not connected")` on a dead
+  link; `_reconcile` already journals that as an error and skips the tick. A mismatch on a
+  live link freezes as before. **Not done by me:** the unfreeze — it writes `data/book.json`
+  and is an owner command. Owner: stop `IBAgent-Supervisor` → `ibagent unfreeze` → start it
+  (check TWS shows SGOV 19 / VTI 7 first). Until then main cannot trade; exits at the broker
+  (none resting — core only) are unaffected.
+- **All 7 dailies (13:51–13:53 UTC) got `market.json = {}`, and the deploy caused it.** After
+  last night's 22:44 UTC restart every variant logged `no historical bars` at 22:45 and
+  `history unavailable; rest of pass skipped` again at 00:05; `bars_recovered` came only at
+  16:48–16:51, after the Gateway's 16:45 UTC auto-restart (4th day at 11:45 AM local). The
+  09-11 stale-bars fallback lives in process memory, so the restart threw it away. Every
+  model applied lesson 10 in one pass ("second empty market.json in a week", no re-diagnosis,
+  no blind stop moves); sniper's 16:48 DIS event run (CTO hire, 0.65, −2.2%) also lacked DIS.
+  **Fix (deployed):** each `_bars` pass that fetches writes `<data_dir>/bars_cache.json`
+  (atomic, gitignored) and a new supervisor loads it as the fallback; age still bounded by
+  `BARS_STALE_MAX_DAYS`, every pass still re-fetches, corrupt file = empty fallback.
+  Honest limit: tonight's restart still started from nothing (the old code never wrote the
+  file), and the full universe is only requested by a model run — if the farm is dead again
+  Monday 13:50 UTC, Monday's daily is blind once more and the file fills from the first good
+  pass after. Universe warm-up after a restart remains the top open item.
+- Session: 8 model runs, all `no_change`, zero orders. bold trailed XOM's stop to 160.50
+  (16:57). Standings: twin −38.21, turtle −55.60, bold −62.61, swing −75.00, scalper −83.50,
+  sniper −113.98, main −163.74. scalper's cooldown ends today; first free scans Monday.
+- Noise as documented: OneDrive PermissionError ×7 (bold 2, scalper 2, twin 2, turtle 1);
+  00:05 cache-fill failures on all 7.
+- **DEPLOYED 22:44 UTC** via `schtasks` from Bash: end all 7 → all Ready → run all 7 → all
+  Running, heartbeats 22:44:52–53, all 7 `reconnected` 22:44:55–22:45:13, bold
+  `sim_stops_restored` (XOM). main came back still frozen, as expected.
+- Not done, on purpose: no shadow knob changes (nothing traded); no scorer change for the DIS
+  governance headline (one run, one variant); fleet-lessons gets one line on lesson 10 only.
+
 ## 2026-09-17 (Thursday night, engineer) — a quiet session; the stall guard went untested because the Gateway never restarted at 04:45 UTC — it restarted at 11:45 AM local again, mid-session; scalper spent 13 model runs inside a cooldown
 
 - **The Gateway's auto-restart is still set to 11:45 AM local (16:45 UTC = 12:45 ET).**

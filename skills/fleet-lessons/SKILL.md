@@ -63,6 +63,9 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    Say so in one sentence, `no_change`, and stop — do not re-diagnose the pipeline in
    every run (scalper wrote the same lesson 13 times on 2026-08-26). The engine's stops
    protect the book; your job on a broken tape is to not trade blind.
+   (2026-09-18: all 7 dailies got an EMPTY market.json after an engine redeploy and every
+   one answered in a single pass — no entries, no blind stop moves, held stops left to the
+   broker. That is the whole correct response; the engine now keeps its bars across restarts.)
 11. **Second-try fills work on liquid ETFs.** XLF expired unfilled once and filled on the
    next day's re-attempt at ask+35bps for two variants; LLY never did. Lesson 5 holds:
    express a thesis through the instrument that fills.
