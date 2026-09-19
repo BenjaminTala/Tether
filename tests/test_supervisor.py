@@ -840,3 +840,30 @@ def test_tick_guard_respects_progress_model_allowance_and_disarm(env):
     sup.guard.disarm()
     assert sup.guard.check(time.monotonic() + 100.0) is False and exits == []
 
+
+
+def test_schedule_state_save_retries_a_briefly_locked_target(tmp_path, monkeypatch):
+    # OneDrive holds schedule_state.json for a moment during the atomic replace: all 46
+    # journaled PermissionErrors through 2026-09-19 were this file, each killing a tick.
+    from ibagent.supervisor import ScheduleState
+    path = tmp_path / "schedule_state.json"
+    real, calls = Path.replace, []
+
+    def flaky(self, target):
+        calls.append(target)
+        if len(calls) == 1:
+            raise PermissionError(13, "Access is denied")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "replace", flaky)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    s = ScheduleState()
+    s.last_protective_ts = 123.0
+    s.save(path)
+    assert len(calls) == 2
+    assert ScheduleState.load(path).last_protective_ts == 123.0
+
+    calls.clear()
+    monkeypatch.setattr(Path, "replace", lambda self, t: (_ for _ in ()).throw(PermissionError(13, "x")))
+    with pytest.raises(PermissionError):  # a lock that persists still surfaces to the tick
+        s.save(path)

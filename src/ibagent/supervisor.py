@@ -150,7 +150,14 @@ class ScheduleState:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.__dict__), encoding="utf-8")
-        tmp.replace(path)
+        try:
+            tmp.replace(path)
+        except PermissionError:
+            # Windows: OneDrive/AV can hold the target briefly (46 of 46 journaled
+            # PermissionErrors were this file). Same one short retry as Book.save; if it
+            # still fails, the tick's error path handles it.
+            time.sleep(0.5)
+            tmp.replace(path)
 
 
 def _monday(d: date) -> str:
