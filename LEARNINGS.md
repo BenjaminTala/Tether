@@ -1,5 +1,44 @@
 # Live-session learnings
 
+## 2026-09-19 (Saturday night, engineer) — no session; MAIN IS STILL FROZEN (owner unfreeze needed before Monday 09:30 ET); the OneDrive PermissionError finally has an address: 46 of 46 are `schedule_state.json`
+
+- **main is still frozen** (`book.json`: `frozen: true`, reason = the 09-18 false mismatch).
+  The owner logged into the Gateway at 12:24 local today (below) but no unfreeze followed.
+  Same runbook as last night: check TWS shows SGOV 19 / VTI 7 → stop `IBAgent-Supervisor` →
+  `ibagent unfreeze` → start it. Until then main plans every daily as `hold: frozen`.
+- **Fix (deployed): `ScheduleState.save` gets the one-shot retry `Book.save` has had since
+  day 4.** Tallying every `PermissionError` trace in all 7 journals (08 + 09): 46 of 46 with
+  a target are `schedule_state.tmp -> schedule_state.json` (20 via `_news_job`, 16 via
+  `_protective_job`, 5 `_status_update`, 5 directly in `_jobs`); `book.json`, which retries
+  once after 0.5 s, has zero. So the "noise as documented" was one unguarded `tmp.replace`,
+  and it was not free: the exception kills the rest of the tick, and `_news_job` runs BEFORE
+  `_protective_job` in `_jobs` — 20 times the protective check of that tick was skipped and
+  ran one loop later. Latest instance: main 22:03:28 UTC tonight. A lock that outlasts the
+  retry still surfaces as a tick error, as before. Test: first replace raises → saved on
+  the second; a persistent lock still raises. If the count keeps growing after this, the
+  retry is too short and the owner's "move data/ out of OneDrive" decision is due for real.
+- **Saturday Gateway outage, 129 min, owner-healed.** 04:30–04:33 UTC: the usual 30-s quote
+  timeout on all 7, back in 5 min. 15:09–15:10 UTC: timeouts again (main's inside
+  `fills_since`), then `LOGGED OUT` handshake errors, `still_down` at 60 and 124 min — the
+  11:45 local auto-restart (`launcher.log` head 11:45:05, "restoring session token") fired
+  mid-outage and did NOT bring the session back; the owner's login at 12:24 local did
+  (`reconnected, down_minutes: 129, failed_attempts: 21` on all 7 at 17:26 UTC). The
+  auto-restart is still 11:45 AM local (5th day). Weekend, nothing at stake.
+- **Last night's two fixes: one half-proven, one untested.** `bars_cache.json` exists on all
+  7 (198–353 KB, last written 12:34–12:43 UTC), so a Monday restart or dead farm has
+  Friday's bars to fall back on (3 days old Monday, inside `BARS_STALE_MAX_DAYS`). The
+  `positions()` dead-link guard did not get exercised: neither of main's two drops today
+  journaled a `reconcile` error (the tick died earlier, in the quote / `fills_since`).
+- No session, no decisions, no orders. Standings unchanged: twin −38.21, turtle −55.60,
+  bold −62.61, swing −75.00, scalper −83.50, sniper −113.98, main −163.74. scalper's
+  cooldown has ended; its first free scans are Monday.
+- **DEPLOYED 22:42 UTC** via `schtasks` from Bash: end all 7 → 0 Running → run all 7 → all
+  Running, heartbeats 22:42:21–22, all 7 `reconnected` 22:42:24–25, bold `sim_stops_restored`
+  (XOM). main came back still frozen, as expected. No bars warnings after the restart.
+- Not done, on purpose: universe warm-up after a restart (still the top open item; with
+  the on-disk cache its cost is now only the symbols no pass has fetched since Friday); no
+  shadow knob changes and no fleet-lessons edit (no model ran today).
+
 ## 2026-09-18 (Friday night, engineer) — MAIN IS FROZEN on a false reconcile mismatch (owner action needed before Monday); last night's deploy blinded all 7 dailies; both causes fixed and deployed
 
 - **main froze itself at 12:23:23 UTC and is still frozen.** Sequence in its journal: VTI
