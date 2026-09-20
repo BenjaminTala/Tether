@@ -1261,7 +1261,12 @@ class Supervisor:
             out.append("TRADING IS HALTED (big drawdown) — everything moved to safety; "
                        "restarting needs you.")
         if self.book.frozen:
-            out.append("Engine is FROZEN: the book and IBKR disagree — check the account.")
+            # 2026-09-18..20: main sat frozen 60+ h through two owner visits; this line named
+            # neither the mismatch nor the remedy, and a freeze never clears itself.
+            out.append("Engine is FROZEN and will NOT trade until you clear it: "
+                       f"{self.book.frozen_reason or 'the book and IBKR disagree'}. "
+                       "Check the account in TWS, then: stop this variant's task, run "
+                       "`ibagent unfreeze` (add `--shadow NAME` for a shadow), start the task.")
         if Path(self.m.kill_switch.file).exists():
             out.append("Kill switch is engaged — the agent is not trading.")
         today = now.astimezone(self.tz).date()

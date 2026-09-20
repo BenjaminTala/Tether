@@ -65,6 +65,16 @@ def test_reconcile_mismatch_freezes(env):
     assert sup.book.frozen and "SPY" in sup.book.frozen_reason
 
 
+def test_frozen_watch_out_names_the_mismatch_and_the_remedy(env):
+    """2026-09-18..20: main stayed frozen 60+ h; the owner-facing line said only 'check the
+    account' - it must carry the reason and the unfreeze command."""
+    m, broker, sup, clock, tmp = env
+    enter(sup, broker, "SPY", "trend", 2.0, 100.0, with_broker=False)
+    sup.tick(clock())
+    line = next(w for w in sup._watch_outs({}, clock()) if "FROZEN" in w)
+    assert "SPY book=2.0 broker=0.0" in line and "ibagent unfreeze" in line
+
+
 def test_stop_fill_racing_reconcile_does_not_freeze(env):
     """2026-08-28 bold: NVDA's GTC stop filled between the tick's fill sync and positions();
     reconcile saw 'NVDA book=3 broker=0 (missing)' and froze the engine for its own exit."""
