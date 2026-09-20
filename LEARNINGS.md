@@ -1,5 +1,39 @@
 # Live-session learnings
 
+## 2026-09-20 (Sunday night, engineer) — no session; MAIN IS STILL FROZEN, 60+ h (owner unfreeze needed before Monday 09:30 ET); the Gateway sat logged out 259 min and this time the 11:45 auto-restart healed it
+
+- **main is still frozen** (`book.json` read-only check: `frozen: true`, reason = the 09-18
+  false mismatch). Third night in this file. Runbook unchanged: TWS shows SGOV 19 / VTI 7 →
+  stop `IBAgent-Supervisor` → `ibagent unfreeze` → start it. If it is not done, Monday's
+  daily plans as `hold: frozen` again.
+- **Fix (alert clarity): the FROZEN watch-out now says what is wrong and how to clear it.**
+  The owner-facing status line read "Engine is FROZEN: the book and IBKR disagree — check
+  the account." for 60+ h, across two owner visits to the machine (Gateway login Sat 12:24
+  local), and named neither the mismatch nor the command. It now carries `frozen_reason`
+  and the stop-task → `ibagent unfreeze [--shadow NAME]` → start-task steps. Text only; the
+  freeze logic, reconcile and every risk rule are untouched. Test: a forced mismatch's
+  watch-out contains the symbol/qty detail and `ibagent unfreeze`.
+- **Sunday Gateway outage, 259 min, self-healed.** 12:20–12:21 UTC (07:20 local): the 30-s
+  timeout on all 7 (main's inside `fills_since`, shadows' on the SGOV quote), then `LOGGED
+  OUT` handshake errors, `still_down` at 62/124/186/248 min, `reconnected, down_minutes: 259,
+  failed_attempts: 42` on all 7 at 16:46–16:47 UTC — one minute after `launcher.log`'s
+  11:45:04 local `IB GATEWAY RESTART` … 11:45:10 `Authentication complete`. So the same
+  auto-restart that did NOT restore Saturday's session DID restore Sunday's: two samples,
+  one each way — the restart is not a dependable healer, and at 11:45 AM local it still
+  lands mid-session on weekdays (6th day; owner setting, Gateway → Configure → Lock and Exit).
+- **Last night's `ScheduleState.save` retry: zero `PermissionError` lines on any of the 7
+  since the 22:42 UTC deploy** (24 h, ~1 of them would have been typical). Too short to
+  call, but the count has stopped for now. `positions()` dead-link guard: still unexercised —
+  main's drop today died in `fills_since` again, before reconcile.
+- No session, no decisions, no orders. Standings unchanged (`ibagent compare`): twin −38.21,
+  turtle −55.60, bold −62.61, swing −75.00, scalper −83.50, sniper −113.98, main −163.74.
+- **DEPLOYED 22:42 UTC** via `schtasks` from Bash (Sunday, market closed): end all 7 → all
+  Ready → run all 7 → all Running, heartbeats 22:42:17–18, all 7 `reconnected`, bold
+  `sim_stops_restored`. main came back still frozen, as expected.
+- Not done, on purpose: no unfreeze (writes `data/book.json`; owner command); no
+  fleet-lessons edit and no shadow knob changes (no model ran, no new results); universe
+  warm-up after a restart stays the top open item.
+
 ## 2026-09-19 (Saturday night, engineer) — no session; MAIN IS STILL FROZEN (owner unfreeze needed before Monday 09:30 ET); the OneDrive PermissionError finally has an address: 46 of 46 are `schedule_state.json`
 
 - **main is still frozen** (`book.json`: `frozen: true`, reason = the 09-18 false mismatch).
