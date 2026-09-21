@@ -85,7 +85,13 @@ PREVIEW_COMMENTARY = re.compile(
     # and twin six days after the print, 3 no_change. A title that asks the reader whether
     # to buy is an opinion column about a move already made. Measured on main's store that
     # night: the only gate-level item these shapes touch.
-    r"|\bis it a buy\b|\bshould you buy\b|\b(stocks?|chipmakers?) to buy\b",
+    r"|\bis it a buy\b|\bshould you buy\b|\b(stocks?|chipmakers?) to buy\b"
+    # 2026-09-21: "Did Elon Musk Just Drop a Big Hint About a Possible SpaceX-Tesla Merger?"
+    # (0.8 via "merger") fired all 7 variants on TSLA +3%, 7 no_change — podcast remarks, no
+    # filing, no deal. A title that ENDS in a question mark reports that nothing has been
+    # announced. Measured on all 7 stores that night (415 unique items): the only gate-level
+    # item it touches.
+    r"|\?\s*$",
     re.I,
 )
 

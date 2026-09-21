@@ -116,6 +116,8 @@ def test_preview_and_commentary_titles_are_dampened_below_the_gate():
            "Beat", "l12"),
         # 2026-09-16: a "should I buy" column fired bold, turtle and twin six days after the print.
         mk("Oracle Stock Sank After Earnings -- Is It a Buy?", "l14"),
+        # 2026-09-21: a question-mark speculation title (0.8 via "merger") fired all 7 on TSLA.
+        mk("Did Elon Musk Just Drop a Big Hint About a Possible SpaceX-Tesla Merger?", "l15"),
     ]
     scored = score_items(previews, ["NVDA", "AVGO", "HD", "ORCL", "AAPL", "CRM"])
     for s in scored:
