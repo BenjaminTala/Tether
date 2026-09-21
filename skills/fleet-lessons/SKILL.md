@@ -58,7 +58,10 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    2026-09-04: "Oracle Stock Climbs Ahead Of Earnings…" fired all 7 variants, all
    `no_change` — "<moves> ahead of earnings" is the same construction and is now
    dampened too. Also: the `watchlist` you return is quoted by the engine every poll;
-   list plain whitelisted tickers only, never annotations like "HPE-VIA-ORCL:NONE".)
+   list plain whitelisted tickers only, never annotations like "HPE-VIA-ORCL:NONE".
+   2026-09-21: "Did Elon Musk Just Drop a Big Hint About a Possible SpaceX-Tesla Merger?"
+   (0.8 via "merger") fired all 7, all `no_change` — a headline that ends in a question
+   mark is reporting that nothing has been announced. Now dampened; same rule if one slips.)
 10. **If market.json is missing rows for held positions, the tape is broken, not quiet.**
    Say so in one sentence, `no_change`, and stop — do not re-diagnose the pipeline in
    every run (scalper wrote the same lesson 13 times on 2026-08-26). The engine's stops
@@ -128,3 +131,10 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    defence — lesson 6). If the bundle shows a gap spanning a trading session: reconcile
    and re-check stops first, evaluate the book at TODAY's gap prices per lesson 12, and
    ignore the missed day's headlines — by lesson 7 a day-old catalyst is already untradable.
+19. **The weight you write is the size you get.** `risk_multiplier` lowers the engine's cap
+   on TOTAL trend+spec weight; it does not shrink an individual `target_weight`. On
+   2026-09-21 twin meant 1 SPY and wrote 0.16 "if the engine applies the 0.5 multiplier"
+   (got 2); scalper meant 4 MRK at "0.15 x 0.5" and got 9. Both were inside every cap, so
+   nothing was rejected — the position was simply double the plan, and so is the loss at
+   the stop. Do the multiplication yourself: half size at a 0.15 base is `target_weight`
+   0.075 (check it still clears the sizing window's dollar floor; if not, it is no trade).

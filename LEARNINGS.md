@@ -1,5 +1,76 @@
 # Live-session learnings
 
+## 2026-09-21 (Monday night, engineer) — main sat out Monday frozen (4th day; the owner asked for Status at 18:08 UTC and no unfreeze followed); the history farm was dead until 16:45 UTC for the 6th time and a plain reconnect did NOT heal it; NOT deployed tonight, on purpose
+
+- **main is still frozen** and its model does not know what that means: both the 13:48 weekly
+  and the 13:54 daily wrote "portfolio.json breakers.frozen=true — not defined anywhere in the
+  bundle … please confirm its meaning". Every run planned `hold: frozen`. The owner's
+  `Status` at 18:08 UTC got last night's reworded watch-out (reason + steps); still frozen at
+  the 20:21 report. Runbook unchanged: TWS shows SGOV 19 / VTI 7 → stop `IBAgent-Supervisor`
+  → `ibagent unfreeze` → start it.
+  **Fix (bundle text, not deployed):** a frozen book's `breakers` now carries `frozen_note` —
+  the reason, that every run is planned as HOLD until the owner clears it, that resting
+  stops still work, and "one line, no_change". Absent when not frozen. Test.
+- **History farm: 6th dead morning, and two new facts.** `no historical bars` from 00:06 UTC
+  until `bars_recovered` at 16:46–16:48 on all 7, right after the Gateway's 16:45 UTC
+  auto-restart. (a) **A client reconnect does not heal it:** sniper, swing and turtle dropped
+  on a 30-s quote timeout at 16:32–16:33, reconnected 16:33–16:34, and served stale bars
+  again at 16:38–16:39; recovery came only after the Gateway restart. So "dead for this
+  connection" (09-11, 09-14 entries) is wrong — it is dead inside the Gateway, and a forced
+  reconnect in our code would fix nothing. (b) **Every dead morning this month followed a
+  22:4x–22:5x UTC fleet redeploy whose first bars pass already failed** (post-deploy
+  warnings 09-10, 09-15, 09-17, 09-20 → dead 09-11, 09-16, 09-18, 09-21; the 09-16 deploy
+  had a clean first pass → 09-17 healthy). That is the 08-23 entry's hypothesis (7 clients
+  re-requesting history at once) with five more samples. The restart used to be cured by
+  the 04:45 UTC Gateway auto-restart before anyone traded; since that moved to 11:45 AM
+  local it is cured mid-session instead.
+  **Therefore no deploy tonight**: tomorrow is the first weekday in two weeks without a
+  redeploy the night before. If 13:50 UTC shows fresh bars on all 7, the deploy is the
+  trigger and the next deploy should start the 7 tasks staggered (60 s apart) — and tonight's
+  two fixes ride along with it. If the farm is dead anyway, deploy as usual tomorrow night.
+- **The 09-18 on-disk fallback is proven:** all 7 weeklies/dailies ran on `bars_stale_served
+  … last_bar 2026-09-18` rows instead of `market.json = {}`. Its limit showed too: main's
+  weekly had 11 of ~50 symbols, TSLA was absent in main's 15:00 event run, and scalper's
+  `bars_refresh` was `fetched 0` for its first 8 scans (13:41–16:42), 22/22 at 17:12.
+  Universe warm-up (report job) stays open — but NOT as written: ~40 extra requests × 7
+  clients in the same minute is the very burst suspected above. Stagger it or do it on main
+  only and share the file.
+- **Event gate: one headline, 7 runs, 7 no_change.** "Did Elon Musk Just Drop a Big Hint About
+  a Possible SpaceX-Tesla Merger?" (0.8 via "merger", TSLA +3.1–3.8%, 14:49–15:00 UTC). Every
+  variant triaged Soft in one pass. **Fix (not deployed):** a title ending in "?" is halved
+  like other commentary; across all 7 stores (415 unique items) it is the only gate-level
+  item touched. sniper's LLY run (CEO interview, 0.65) was a correct Soft pass — left alone.
+- **Both of today's entries filled at about twice the size the model meant.** twin's daily:
+  "intended 1 share … target_weight 0.16 so one share still fits if the engine applies the
+  0.5 multiplier" → 2 SPY. scalper's 18:13 scan: "weight 0.15 x 0.5 is about $744, 4 shares …
+  without the multiplier it is 9" → 9 MRK. `risk.plan_orders` applies `risk_multiplier` to
+  the TOTAL active-weight cap and scales pro-rata only above it; a single 0.15 weight is
+  never touched. Both fills were inside every cap — the engine did what it is written to do;
+  the models guessed at it. **Fix (prompt text, not deployed):** the shared system prompt now
+  says the multiplier never shrinks an individual `target_weight` — "if you mean half size,
+  write half the weight". No risk-code change. Test pins the sentence. Fleet lesson 19.
+- Session: bold's XOM sim stop filled 160.40 at 13:52 UTC (−21.56, 4th loser → entry cooldown
+  to 09-23). **twin bought SPY** 2 @ 766.67 in the daily (regime/breadth thesis, stop 729 →
+  trailed to 757.37) and is the first variant above water. **scalper bought MRK** 9 @ 149.56
+  at 18:13 UTC (first entry after its cooldown; +2.2% day on a pipeline item), stop 145.50.
+  Standings: twin +11.49, turtle −2.95, swing −48.67, bold −68.26, scalper −74.93,
+  sniper −82.39, main −126.87 (main is core-only and frozen; its gain today is VTI).
+- Written down, not changed:
+  - **twin's SPY trail was replaced 20 times in one session**, some by 2–4 cents
+    (755.5983 → 755.6383). Free on the sim; on main each one is a cancel/replace at IBKR.
+    A minimum trail step (e.g. 0.1 ATR) would cut it ~5×, but it touches the stop path —
+    owner decision, not a nightly tweak.
+  - **34 decision notes this month end with "Gmail/Calendar/Drive connectors need
+    authorization in claude.ai settings"** (scalper 12; first 09-10). The owner's claude.ai
+    connectors are being offered to the headless model run. `dontAsk` + the allow-list would
+    refuse them, but they should not be loaded at all: **owner, do not authorize those
+    connectors on this account while the fleet runs**; candidate fix is
+    `--strict-mcp-config` on the runner command, to be tried with a manual `ibagent run`
+    watching, not blind.
+  - Zero `PermissionError` lines on any of the 7 for a second day since the
+    `ScheduleState.save` retry. `positions()` dead-link guard still unexercised (main's
+    16:45 drop died in `fills_since` again).
+
 ## 2026-09-20 (Sunday night, engineer) — no session; MAIN IS STILL FROZEN, 60+ h (owner unfreeze needed before Monday 09:30 ET); the Gateway sat logged out 259 min and this time the 11:45 auto-restart healed it
 
 - **main is still frozen** (`book.json` read-only check: `frozen: true`, reason = the 09-18
