@@ -34,3 +34,25 @@ def test_excerpt_whole_share_warning(md):
 def test_excerpt_without_equity_omits_dynamic_block(md):
     m = mandate_from_dict(md)
     assert "SIZING AT CURRENT EQUITY" not in mandate_excerpt(m)
+
+
+def test_frozen_breaker_is_explained_to_the_model(tmp_path):
+    """2026-09-21: main's weekly and daily both wrote 'breakers.frozen=true — not defined
+    anywhere in the bundle ... please confirm its meaning'. A frozen book now carries the
+    reason and what the engine will do; an unfrozen one carries no note."""
+    from ibagent.agent.bundle import degraded_portfolio_json
+    from tests.conftest import make_book
+    book = make_book(tmp_path)
+    assert "frozen_note" not in degraded_portfolio_json(book, "x")["breakers"]
+    book.freeze("reconcile mismatch: VTI book=7.0 broker=0.0 (missing)")
+    br = degraded_portfolio_json(book, "x")["breakers"]
+    assert br["frozen"] is True
+    assert "VTI book=7.0" in br["frozen_note"] and "no_change" in br["frozen_note"]
+
+
+def test_system_prompt_says_the_multiplier_does_not_shrink_a_single_weight():
+    """2026-09-21: twin wrote 'one share still fits if the engine applies the 0.5 multiplier'
+    and got 2 SPY; scalper computed 4 MRK 'x 0.5' and got 9. risk.plan_orders scales only
+    when the TOTAL active weight exceeds cap x multiplier; the prompt now says so."""
+    from ibagent.agent.bundle import SYSTEM_MD
+    assert "never shrinks an individual `target_weight`" in " ".join(SYSTEM_MD.split())

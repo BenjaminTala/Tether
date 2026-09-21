@@ -70,6 +70,9 @@ Reply with a single JSON object valid against decision_schema.json — no prose 
 For `action: "rebalance"`, `positions` is the COMPLETE desired trend+spec book (any held
 active position you omit will be SOLD). Core is managed by code; never include core holdings.
 Every position needs a falsifiable thesis, an invalidation condition, and a stop.
+`risk_multiplier` scales the engine's TOTAL trend+spec weight cap only; it never shrinks an
+individual `target_weight`. The weight you write is the size you get — if you mean half
+size, write half the weight.
 """
 
 TASKS: Dict[str, str] = {
@@ -201,6 +204,20 @@ def positions_json(book: Book) -> list:
         for p in sorted(book.positions.values(), key=lambda x: x.symbol)]
 
 
+def _breakers_json(book: Book) -> dict:
+    out = {"halted": book.halted, "frozen": book.frozen, "paused_sleeves": book.paused_sleeves}
+    if book.frozen:
+        # 2026-09-21: main's weekly and daily both wrote "breakers.frozen=true — not defined
+        # anywhere in the bundle ... please confirm its meaning" (4th frozen day).
+        out["frozen_note"] = ("The engine froze itself: its book and the broker disagreed at "
+                              "reconcile (" + (book.frozen_reason or "no reason recorded")[:200] +
+                              "). Until the OWNER clears it, the engine plans every run as HOLD: "
+                              "no entries, exits or stop changes you propose will be placed; "
+                              "stops already resting at the broker still work. You cannot clear "
+                              "it. Say so in one line and return no_change.")
+    return out
+
+
 def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate) -> dict:
     return {
         "equity": snap.equity,
@@ -210,8 +227,7 @@ def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate) -> dict:
         "hwm": book.hwm,
         "realized_pnl": book.realized_pnl,
         "week": {"new_positions": book.week_new_positions, "turnover_usd": round(book.week_turnover_usd, 2)},
-        "breakers": {"halted": book.halted, "frozen": book.frozen,
-                     "paused_sleeves": book.paused_sleeves,
+        "breakers": {**_breakers_json(book),
                      "consecutive_spec_losers": book.consecutive_spec_losers},
         "cooldowns": book.cooldowns,
         "positions": positions_json(book),
@@ -230,8 +246,7 @@ def degraded_portfolio_json(book: Book, reason: str) -> dict:
                    "the broker regardless."),
         "pot_cash": book.pot_cash,
         "realized_pnl": book.realized_pnl,
-        "breakers": {"halted": book.halted, "frozen": book.frozen,
-                     "paused_sleeves": book.paused_sleeves},
+        "breakers": _breakers_json(book),
         "positions": positions_json(book),
     }
 
