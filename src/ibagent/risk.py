@@ -243,6 +243,14 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
                                          limit_price=lp, tif="DAY"),
                         sleeve=held.sleeve, intent="trim", reason="target below current"))
         elif diff > 0:
+            if held and diff < mandate.capital.min_order_usd:
+                # A held position re-listed at (about) its current weight is a hold, not an
+                # add — the trim branch above already ignores the same dust in the other
+                # direction. 2026-09-22: scalper re-listed MRK 0.14 / LLY 0.12 in two
+                # rebalances (omitting them would SELL them) and got "MRK: size 16 below 25",
+                # "LLY: no averaging down" — a $16 and a $21 delta — echoed as REJECTED
+                # lines the next runs were told not to re-propose.
+                continue
             entries.append((p, diff))
 
     # ---- entry gates ---------------------------------------------------------------------

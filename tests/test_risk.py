@@ -121,11 +121,28 @@ def test_stop_out_of_bounds_falls_back_to_atr_else_reject(mandate, tmp_path):
 
 def test_no_averaging_down(mandate, tmp_path):
     b = make_book(tmp_path)
-    enter(b, "QQQ", "trend", 1, 100, stop=92)                          # avg_cost ~100.35
+    enter(b, "QQQ", "trend", 0.5, 100, stop=92)                        # avg_cost ~100.70
     plan = plan_orders(mandate, b, {"QQQ": make_quote("QQQ", 95)}, {},
-                       rebalance(intent("QQQ", "trend", 0.12, stop=88)), NOW)
+                       rebalance(intent("QQQ", "trend", 0.12, stop=88)), NOW)   # a ~$72 add
     assert plan.orders == []
     assert "averaging down" in plan.rejections[0].reason
+
+
+def test_held_position_relisted_at_current_weight_is_a_hold_not_a_rejected_add(mandate, tmp_path):
+    """2026-09-22: scalper re-listed held MRK/LLY at their current weights in two rebalances
+    (omitting a held symbol sells it) and the engine answered "size 16 below 25" and "no
+    averaging down" for a $16 and a $21 delta — REJECTED lines the next runs were told not
+    to re-propose. A held add below min_order_usd is dust: no order, no rejection. A real
+    add still goes through the gates."""
+    b = make_book(tmp_path)
+    enter(b, "QQQ", "trend", 1, 100, stop=92)
+    q = {"QQQ": make_quote("QQQ", 110)}                      # held ~$110, trend cap ~$121
+    plan = plan_orders(mandate, b, q, {}, rebalance(intent("QQQ", "trend", 0.12, stop=95)), NOW)
+    assert plan.orders == [] and plan.rejections == []       # diff ~$11 < min_order_usd 25
+    b2 = make_book(tmp_path / "b2")
+    enter(b2, "QQQ", "trend", 0.5, 100, stop=92)             # held ~$55: a ~$66 add is real
+    plan = plan_orders(mandate, b2, q, {}, rebalance(intent("QQQ", "trend", 0.12, stop=95)), NOW)
+    assert [o.req.symbol for o in plan.orders] + [r.symbol for r in plan.rejections] == ["QQQ"]
 
 
 def test_cooldown_blocks_reentry(mandate, tmp_path):
