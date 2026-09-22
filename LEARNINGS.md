@@ -1,5 +1,70 @@
 # Live-session learnings
 
+## 2026-09-22 (Tuesday night, engineer) — no redeploy last night and the history farm was ALIVE at the open for the first weekday in two weeks — and the fleet could not use it, because Monday's TSLA event run had shrunk every watchlist to ["TSLA"]; main frozen a 5th day
+
+- **The no-deploy hypothesis held on its first test.** Zero warnings and zero errors on all 7
+  between 22:30 UTC last night and 13:50 UTC today — no `no historical bars`, no `history
+  unavailable`, no 00:05 cache-fill failures; scalper's 13:38 `bars_refresh` was `fetched 12,
+  failed []` (the `today: 0` is 09:38 ET with no daily bar yet, as read on 09-17) and 15/15 at
+  14:06. Every dead morning this month followed a nightly redeploy; the one morning without
+  one was clean. One sample, so the remedy is tested tonight rather than assumed: the
+  deploy below starts the 7 tasks 60 s apart instead of in one burst. If tomorrow 13:50 UTC
+  is clean, the burst was the cause; if the farm is dead again, redeploys kill it regardless
+  of stagger and the fix has to be elsewhere (e.g. deploy on Friday nights only).
+- **BUG (fixed, deployed): an event run's watchlist REPLACED the daily's.** Monday's TSLA
+  merger-rumour run (all 7, 14:49–15:00 UTC) answered `watchlist: ["TSLA"]` on bold, turtle,
+  main and `["LLY","TSLA"]` / `["SPY","TSLA"]` on sniper/twin, and `_agent_job` stored that
+  as THE list. `_symbols_for_run("daily")` is held | core | watchlist, so today's dailies — on
+  a working farm — fetched bars for SGOV, VTI and TSLA only. main: "market.json has only
+  SGOV/TSLA/VTI, so no ma20/ATR for any trend candidate"; bold: "no trend-whitelisted symbol
+  has close/ma20/atr … redeployment is the task"; turtle: "redeployment is deferred, not
+  declined"; sniper: "market.json has no SPY/QQQ rows to re-score". Four variants sat idle for
+  want of rows the farm would have served. Fix: an event run's list is MERGED (its symbols
+  first, then the existing list, under the schema's 15-cap); a daily/weekly still replaces it
+  outright. Test: event adds TSLA to [AVGO, JPM, NVDA]; a full list stays at 15; a daily
+  with ["SPY"] replaces. The 09-03 whitelist filter is unchanged. (scalper and swing were
+  not hit: scalper scans the whole whitelist by construction; swing's event run happened to
+  return a 5-name list.)
+- **Fix (deployed): a held position re-listed at its current weight is a hold, not a
+  rejected add.** scalper's 16:10 and 18:43 UTC rebalances listed MRK 0.14 and LLY 0.12
+  alongside the new entry because omitting a held symbol SELLS it (`plan_orders`: "not in
+  target book" → exit), and the engine answered `MRK: size 16 below 25 even at hard-cap
+  risk` twice and `LLY: no averaging down (price <= avg cost)` once — a $16 and a $21 delta.
+  Each became a `REJECTED … do not re-propose` line in journal_tail and a "MRK REJECTED by
+  the engine" run summary, on a symbol the model has to keep listing. `plan_orders` now
+  drops a held ADD whose notional is under `capital.min_order_usd` (25) before the gates,
+  the mirror of the trim branch that already ignores the same dust downward. The set of
+  orders the engine can place is a strict subset of before; the no-averaging-down gate is
+  untouched and its test now exercises a real-sized add (the old one's $24 delta was dust
+  under the fixture's cap). Test: a $11 re-list yields no order and no rejection; a $66 add
+  reaches the gates.
+- **scalper traded twice and moved MRK to breakeven on inflated arithmetic.** LLY 1 @
+  1173.33 (16:10 UTC, stop 1145, "continuation +2.3% from open, health care leading"), SMH 2
+  @ 605.62 (18:43, stop 590, "2.53 ATR above ma20 — passes the 3-ATR gate, the weekly skill's
+  1-ATR filter would reject it; tell me if you want the stricter filter intraday" — owner
+  question, not mine). MRK: the engine's 1.5-ATR trail walked 145.50 → 148.03 in six steps
+  14:17–15:50 UTC; the 15:40 scan read 153.19 as "+2.2R on the engine stop" and correctly
+  held (first day at +1R, lesson 14); the 16:10 scan used the same number to move the stop
+  to 149.70 "after >+1R on the current 148.03 stop". Against the ENTRY stop (145.50, 1R =
+  4.06) the gain was +0.85R. MRK closed 151.3, the stop 1.1% under. Fleet lesson 14
+  addendum: R against a trailed stop is always inflated; measure against the original risk.
+- **main frozen, 5th day.** The 13:52 daily planned `hold: frozen` again (the model:
+  "breakers.frozen=true … an entry freeze the engine would refuse anyway"). Last night's
+  `frozen_note` rides on tonight's deploy. Runbook unchanged: TWS shows SGOV 19 / VTI 7 →
+  stop `IBAgent-Supervisor` → `ibagent unfreeze` → start it. main's tick died in
+  `fills_since` at 16:45:46 UTC on the Gateway auto-restart (8th day at 11:45 AM local; all
+  7 back by 16:47).
+- Session otherwise: 6 dailies `no_change`; sniper's only gate run was JPM −2.0% on "Jamie
+  Dimon says hyperscaler AI spending could hit $1 trillion next year" (0.65, CEO remarks,
+  Soft, one run — noted, no scorer change). twin's SPY trail moved once (757.44) against 20
+  times yesterday. COST `no historical bars` at 21:08–21:14 UTC on bold/swing/twin →
+  `bars_stale_served last_bar 2026-09-18` (one symbol, fallback working). Zero
+  `PermissionError` on all 7, third day. Standings: twin +15.15, turtle +1.45, swing −46.47,
+  scalper −61.07 (3 trend positions), bold −66.93, sniper −79.75, main −123.77.
+- Written down, not changed: twin's trail min-step, the claude.ai connector offer to the
+  headless run, universe warm-up (still open; tonight's watchlist fix restores the DAILY's
+  rows, the WEEKLY's ~50 still depend on the farm being alive at 13:47 UTC Monday).
+
 ## 2026-09-21 (Monday night, engineer) — main sat out Monday frozen (4th day; the owner asked for Status at 18:08 UTC and no unfreeze followed); the history farm was dead until 16:45 UTC for the 6th time and a plain reconnect did NOT heal it; NOT deployed tonight, on purpose
 
 - **main is still frozen** and its model does not know what that means: both the 13:48 weekly

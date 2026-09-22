@@ -95,7 +95,14 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    held two sessions — and a routine −0.5% morning dip still tagged it for −$2 while
    original-stop holders stayed in. Breakeven is a free exit option and the first shakeout
    WILL exercise it: move to breakeven only when you accept "flat and out" as the outcome;
-   if you still want the position, trail below structure instead.)
+   if you still want the position, trail below structure instead.
+   2026-09-22 addendum: **R is measured against the ENTRY stop, never the trailed one.**
+   scalper's 11:36 ET scan read MRK at 153.19 as "+2.2R on the engine stop" (147.92, the
+   engine's 1.5-ATR trail — the entry stop was 145.50, so the true gain was +0.85R) and
+   correctly held; the 12:07 ET scan used the same arithmetic to move the stop to
+   breakeven "after >+1R" on the FIRST day above +1R. A trailed stop shrinks the
+   denominator every hour, so "R" against it is always inflated; the rule above needs
+   +1R on the ORIGINAL risk, held for a session.)
 15. **A sympathy move is not your catalyst.** On 2026-09-03 "Snowflake Soars 23% …
    Oracle Advances 3%" and "HPE Earnings Top Estimates Amid Oracle AI Data Center Deal"
    each fired ~6 variants on ORCL (+4–5%): 12+ runs, all no_change, all the same triage.
