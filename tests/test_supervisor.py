@@ -754,6 +754,41 @@ def test_watchlist_keeps_only_whitelisted_tickers(env):
     assert "HPE-VIA-ORCL:NONE" not in sup._symbols_for_run("daily")
 
 
+def test_event_run_adds_to_the_watchlist_and_a_daily_replaces_it(env):
+    """2026-09-21: the TSLA merger-rumour event run answered watchlist ["TSLA"] and that
+    REPLACED the daily's list on bold/turtle/sniper/twin, so the 09-22 daily (the first
+    healthy-farm morning in two weeks) fetched bars for held|core|TSLA only and two variants
+    deferred redeployment for lack of a single trend-whitelisted row. An event run's list is
+    merged (newest first, under the schema cap); a daily/weekly still replaces it."""
+    m, broker, sup, clock, tmp = env
+    sup.skills_dir = _install_skills(tmp)
+    sup.state.watchlist = ["AVGO", "JPM", "NVDA"]
+
+    def _decision(run_type, watchlist):
+        return {"schema_version": 1, "run_type": run_type, "action": "no_change",
+                "market_regime": "neutral", "risk_multiplier": 1.0, "positions": [],
+                "stop_updates": [], "watchlist": watchlist,
+                "skills_applied": ["market-regime", "failure-modes"],
+                "notes_for_human": "n", "journal_lessons": ""}
+
+    now = datetime(2026, 8, 12, 15, 0, tzinfo=timezone.utc)
+    sup.runner = FakeRunner([RunResult(ok=True, decision=_decision("event", ["TSLA"]))])
+    sup._agent_job("event", now, event_note="TSLA +3%")
+    assert sup.state.watchlist == ["TSLA", "AVGO", "JPM", "NVDA"]
+    assert {"AVGO", "JPM", "NVDA", "TSLA"} <= sup._symbols_for_run("daily")
+
+    # the cap holds: an event run cannot grow the list past the schema's 15
+    sup.state.watchlist = [f"S{i}" for i in range(15)]
+    sup.runner = FakeRunner([RunResult(ok=True, decision=_decision("event", ["TSLA"]))])
+    sup._agent_job("event", now, event_note="TSLA +3%")
+    assert len(sup.state.watchlist) == 15 and sup.state.watchlist[0] == "TSLA"
+
+    # a daily still owns the list outright
+    sup.runner = FakeRunner([RunResult(ok=True, decision=_decision("daily", ["SPY"]))])
+    sup._agent_job("daily", now)
+    assert sup.state.watchlist == ["SPY"]
+
+
 def test_usage_limited_daily_rolls_forward_and_retries(env):
     """2026-09-03: a 13:45-13:57 UTC usage-limit cluster killed 5 of 7 variants' daily runs;
     last_daily was marked before the run, so a transient limit burned the whole day's slot

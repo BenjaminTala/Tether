@@ -51,6 +51,7 @@ DATA_DIR = Path("data")
 BARS_FOR_STATS = 300
 BARS_FAIL_STREAK = 3          # consecutive bar failures in one pass before skipping the rest
 BARS_STALE_MAX_DAYS = 5       # serve yesterday's cached bars while the farm is down, up to this age
+WATCHLIST_MAX = 15            # Decision.watchlist's schema cap; an event run merges under it
 PROTECTIVE_MIN_SPACING_S = 900
 STATUS_UPDATE_SPACING_S = 3600          # intraday Telegram status every hour during RTH
 TICK_STALL_MIN_S = 300                  # a tick with no progress for this long is wedged
@@ -896,6 +897,15 @@ class Supervisor:
             if dropped:
                 self.journal.record("warning", {"where": "watchlist", "dropped": dropped,
                                                 "msg": "not whitelisted; ignored"})
+            if kept and run_type == "event":
+                # An event run triages ONE headline and lists its trigger symbol. 2026-09-21:
+                # the TSLA merger-rumour run left bold/turtle with watchlist ["TSLA"], so
+                # the 09-22 daily (the first healthy-farm morning in two weeks) fetched bars
+                # for SGOV, TSLA and VTI only and both wrote "redeployment deferred: no
+                # trend-whitelisted symbol has close/ma20/atr". The daily/weekly own the
+                # list; an event run can only add to it (newest first, schema cap kept).
+                kept = kept + [w for w in self.state.watchlist if w not in kept]
+                kept = kept[:WATCHLIST_MAX]
             if kept:
                 self.state.watchlist = kept
                 self.state.save(self.data_dir / "schedule_state.json")
