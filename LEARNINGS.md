@@ -1,5 +1,87 @@
 # Live-session learnings
 
+## 2026-09-23 (Wednesday night, engineer) — the six shadows sat DEAD through the whole session: last night's engineer stopped all 7 for the redeploy, backgrounded the staggered start, ended its turn and was gone; the watchdog (main-only) called it healthy; main unfrozen by the owner and back in SPY
+
+- **All six shadows were down from 22:42 UTC 09-22 to 22:43–22:48 UTC tonight — 24 h, the
+  entire 09-23 session, zero journal lines, every book untouched.** Task Scheduler: all six
+  `Ready`, Last Result `267014` (= terminated), Last Run Time 09-20 17:42 local — i.e. the
+  09-22 deploy's Stop ran and its Start never did. The blob `engineer-20260922.txt` (162
+  bytes) ends: *"Waiting on the staggered start to finish. Nothing else can proceed until the
+  heartbeats are in, so I'll pick up when the notification arrives."* A headless `claude -p`
+  run EXITS when the model ends its turn, and its background jobs die with it; main was the
+  first task in the loop (`reconnected` 22:47:36), the harness's `engineer` verdict line is
+  22:48:10, and nothing after. The report was never written either (`engineer_report.txt`
+  still dated 09-21 — the owner's Telegram carried the 09-21 text again). **Runbook, from
+  now on: the deploy dance runs in the FOREGROUND, one task at a time (end → run → heartbeat),
+  and the report is written BEFORE the dance, then amended.** Never end the turn with work
+  in flight. Tonight's restart: bold 22:43:28, scalper 22:44:28, sniper 22:45:28, swing,
+  turtle, twin 60 s apart, each heartbeat within 2 s of its start — run as a background
+  job of THIS session, which I kept alive and polled until all six were verified (a
+  foreground loop is the safer form; a 6-minute sleep loop is what a background job is for,
+  the mistake was ending the turn).
+- **Fix (code, effective at the watchdog's next 5-min run — it is a fresh process each
+  time): the watchdog now checks every `data-shadows/<name>/heartbeat.txt` that has a
+  `book.json` beside it.** `watchdog_state.json` was `{}` all day and no alert fired,
+  because the watchdog only ever read main's heartbeat. A stale/unreadable shadow heartbeat
+  opens ONE warning episode ("⚠️ shadow supervisors down: bold (last beat 1441 min ago), …"
+  with the Start-ScheduledTask hint), hourly reminders, an info on recovery — journaled as
+  `shadows_down` / `shadows_reminder` / `shadows_recovered` under its own state keys, so a
+  main recovery (which used to save `{}`) and a shadow episode never wipe each other. A
+  shadow outage is a warning, never a 🚨: sims, no broker exposure. Main's logic is
+  unchanged. Test covers the interleaving (twin stale → warning naming twin only; main dies
+  and recovers inside the episode; hourly reminder; recovery clears the state).
+- **The stagger hypothesis is REFUTED by a one-client sample.** Last night only main was
+  restarted (22:47 UTC, again by the owner at 00:38), and its history was dead from the first
+  pass (`no historical bars` GOOGL/AVGO/XLF 22:53, 00:02, 00:39, 13:52 UTC; `bars_stale_served
+  last_bar 2026-09-22` every poll) until `bars_recovered` 16:48–16:57 UTC, right after the
+  Gateway's 16:45 auto-restart (9th day at 11:45 AM local). So "7 clients re-requesting
+  at once" is not the mechanism: a single freshly connected client after ~22:45 UTC gets a
+  dead history farm until the next Gateway restart, while the 09-22 morning — no restart,
+  long-lived connections — was clean. The remaining explanation that fits every sample: the
+  farm subscription belongs to the connection and a connection made in the evening window
+  never gets one until the Gateway itself restarts. Consequence: the six shadows I started
+  tonight will very likely be on stale bars tomorrow until 16:45 UTC (their `bars_cache.json`
+  holds 09-22's bars, one day old at the open — inside the fallback bound). Main's own
+  connection has been alive since 16:46 UTC and should be fine. The only deploy timing that
+  the evidence supports is one the Gateway restart follows — i.e. right BEFORE 11:45 local,
+  or after the owner moves the auto-restart to the evening; written down, not automated.
+- **main: unfrozen and trading again.** Owner `ibagent unfreeze` 00:38:53 UTC (was the 09-18
+  false mismatch; the unfreeze rides with a task restart, `reconnected` 00:38:56). The 13:55
+  daily bought **SPY 1 @ 770.64** (weight 0.08 written as "1 whole share, half size per
+  neutral rules" — **fleet lesson 19 applied on its first live day: wrote the weight it
+  meant, got the size it meant**), stop 747.00 → engine-trailed 755.34 (14:07) → 755.44
+  (16:51). SPY closed 768.59 (−0.4%), VTI −0.8%: day −27.15, all-time −150.19 (main
+  standings: twin +15.15, turtle +1.45, swing −46.47, scalper −61.07, bold −66.93, sniper
+  −79.75, main −150.19 — the shadows' numbers are yesterday's, they did not run). Three
+  event runs, three `no_change`, each in one pass: TSLA 0.8 "Elon Musk Is Teasing a
+  Tesla-SpaceX Merger Again" (the 09-21 podcast re-hashed, no "?" so the dampener does not
+  reach it; lesson 13 applied, TSLA absent from market.json anyway), MCD −6.1% CEO
+  investor-day remarks 0.75 (Hard, unheld, long-only, in a downtrend — correct pass), META
+  +2.1% CNBC Investing Club commentary 0.7 (4.4 ATR over ma20; the model also noted one META
+  share exceeds the $591 spec window — structurally unavailable). No scorer change for any
+  of the three: one run each, all handled correctly.
+- **Two model observations worth keeping, no code change.** (a) main's daily: "market.json
+  close 774.61 differs from the live quote 771.02; the extension gate should be checked
+  against the live quote, which moved SPY from 1.40 ATR to 0.86 ATR over ma20" — the bundle's
+  `close` is the last daily bar, and at 09:55 ET that is YESTERDAY's close; the model caught
+  it, but the bundle could say so in the field name. (b) Its `lessons`: "three weeks of
+  no_change with 54% in cash while SPY went from 754 to a new high" — the true cause of most
+  of that was the freeze (09-18 → 09-23), not the caution read; the model does not see the
+  freeze in its history and blames its own judgement. Noted for the next quiet night.
+- **main's heartbeat stalled ≥ 10 min at ~04:30–04:40 UTC** (watchdog `down` 04:40:01 "last
+  beat 10 min ago", `recovered` 04:45:01, 5.0 min) with nothing journaled between 00:40 and
+  06:02 — the 09-16 wedge's shape and hour, self-healed this time, under `TickGuard`'s 900-s
+  off-hours allowance, so no `tick_aborted` and no stack. The Gateway's auto-restart is still
+  11:45 AM local (main's 16:45:22 `fills_since` ConnectionError, `reconnected` 16:46:24), so
+  this was not the restart. One sample; the guard stays as it is.
+- Written down, not changed: the deploy-timing rule above; `--strict-mcp-config` (no new
+  evidence tonight — main's three event runs did not mention the connectors); twin's trail
+  min-step; universe warm-up; the `trail_stop SPY qty=0.0` wording in `protective` journal
+  lines (the sell_qty default printed for a stop move — cosmetic).
+- **Verification of tonight's restart** (foreground, each task individually): see the
+  report; all six `Running`, heartbeats within seconds, each journaled `reconnected` and the
+  MISSED-day close report for 09-23 (the 09-10 banner, working on the shadows).
+
 ## 2026-09-22 (owner session, 00:30-01:00 UTC 09-23) — main sat FROZEN for 4.5 days and nobody noticed; IBKR's paper back-end duplicated SGOV
 
 - **main froze 2026-09-18 12:23 UTC** (reconcile: broker reported SGOV 0 and VTI 0 while the

@@ -145,3 +145,8 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    nothing was rejected — the position was simply double the plan, and so is the loss at
    the stop. Do the multiplication yourself: half size at a 0.15 base is `target_weight`
    0.075 (check it still clears the sizing window's dollar floor; if not, it is no trade).
+   (2026-09-23: main wrote `SPY:trend:0.08` meaning "1 whole share, half size" and got
+   exactly 1 share — the rule works when you do the arithmetic yourself. Also from that
+   run: the bundle's `close` is the last DAILY bar, i.e. yesterday's close during the
+   morning daily; check the extension gate against the live quote, which that day moved
+   SPY from 1.40 to 0.86 ATR over ma20.)
