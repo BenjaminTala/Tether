@@ -1,5 +1,33 @@
 # Live-session learnings
 
+## 2026-09-22 (owner session, 00:30-01:00 UTC 09-23) — main sat FROZEN for 4.5 days and nobody noticed; IBKR's paper back-end duplicated SGOV
+
+- **main froze 2026-09-18 12:23 UTC** (reconcile: broker reported SGOV 0 and VTI 0 while the
+  book held both) and stayed frozen through four trading sessions. The freeze itself was
+  CORRECT — fail closed on a broker/book mismatch — but its visibility failed three ways:
+  (1) the daily report kept printing normal P&L with no FROZEN banner; (2) the model saw
+  `breakers.frozen=true` in its bundle on 09-21/09-22, said so in its notes, and had no
+  channel louder than a note; (3) the owner-session catch-up on 09-21 read the decisions
+  and reports but not the freeze line, and reported "all healthy". *Open for engineer: the
+  daily report and hourly pulse must LEAD with "FROZEN since <ts>: <reason>" the way they
+  now lead with MISSED — a frozen book that prints normal P&L is the same lie shape as a
+  missed day that prints normal P&L (09-16 lesson).*
+- **The mismatch cause was IBKR's paper back-end, in two acts**: at 09-18 12:23 the
+  position feed returned EMPTY (freeze), and when it came back SGOV was 38 instead of 19 —
+  exact double, same avg cost 100.63 as our one and only 19-share buy (08-18), while VTI
+  returned correct at 7. No order of ours did this (journal has a single SGOV fill ever).
+  Paper-account position duplication after a back-end hiccup is a known IBKR paper quirk;
+  a LIVE account would not do this, but the freeze machinery treated it exactly right.
+- **`account.dedicated: false` is what makes the unfreeze safe**: shared-account reconcile
+  only freezes when the broker holds LESS than the book; the 19 phantom SGOV shares sit
+  outside the pot's accounting and cost nothing. Owner-session unfroze 00:52 UTC with the
+  single-writer dance (stop task → `ibagent unfreeze` → start task). If we ever flip to a
+  dedicated account, this same event WOULD re-freeze — correct behaviour there.
+- **go_live_gate arithmetic**: the 09-18 freeze restarts the "0 reconcile freezes in 30
+  days" clock → that criterion now clears 2026-10-18 at the earliest, which still lands
+  inside the ~Oct 19 window the 60-paper-day criterion already set. Net: go-live date
+  unchanged, but another freeze between now and then pushes it out day-for-day.
+
 ## 2026-09-22 (Tuesday night, engineer) — no redeploy last night and the history farm was ALIVE at the open for the first weekday in two weeks — and the fleet could not use it, because Monday's TSLA event run had shrunk every watchlist to ["TSLA"]; main frozen a 5th day
 
 - **The no-deploy hypothesis held on its first test.** Zero warnings and zero errors on all 7
