@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -245,7 +246,7 @@ def test_watchdog(env, tmp_path):
     a = CountingAlerter()
     jdir = tmp / "wd-journal"
     args = dict(heartbeat_path=hb, book_path=tmp / "book.json", alerter=a, state_path=st,
-                journal_dir=jdir)
+                journal_dir=jdir, shadows_root=tmp / "no-shadows")
 
     def journaled():
         return [(e["ts"], e["payload"]) for e in Journal(jdir).iter(kinds=("watchdog",))]
@@ -278,7 +279,7 @@ def test_watchdog(env, tmp_path):
     missing = tmp / "nope.txt"
     (tmp / "book.json").write_text("{}", encoding="utf-8")
     args2 = dict(heartbeat_path=missing, book_path=tmp / "book.json", alerter=a, state_path=st,
-                 journal_dir=jdir)
+                 journal_dir=jdir, shadows_root=tmp / "no-shadows")
     assert watchdog_check(m, now=NOW, **args2) == 1
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args2) == 1
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info", "critical"]
@@ -290,6 +291,65 @@ def test_watchdog(env, tmp_path):
     args3 = dict(args2, journal_dir=blocked)
     assert watchdog_check(m, now=NOW + timedelta(minutes=10), **args3) == 1
     assert [lvl for lvl, _ in a.sent][-1] == "critical"
+
+
+def test_watchdog_covers_shadows(env, tmp_path):
+    """2026-09-22: all six shadows were stopped for a redeploy at 22:42 UTC and never
+    restarted; they sat dead through the whole 09-23 session while the (main-only) watchdog
+    reported healthy. A stale shadow heartbeat is now its own warning episode with hourly
+    reminders and a recovery line; main's episode logic is untouched and the two never
+    wipe each other's state."""
+    m, broker, sup, clock, tmp = env
+    hb = tmp / "heartbeat.txt"
+    st = tmp / "watchdog_state.json"
+    sup.tick(clock())                                      # main beats at NOW
+    shadows = tmp / "shadows"
+    for name in ("bold", "twin"):
+        (shadows / name).mkdir(parents=True)
+        (shadows / name / "book.json").write_text("{}", encoding="utf-8")
+        (shadows / name / "heartbeat.txt").write_text(NOW.isoformat(), encoding="utf-8")
+    (shadows / "never-started").mkdir()                    # no book.json: nothing to guard
+    a = _CountingAlerter()
+    jdir = tmp / "wd-journal"
+    args = dict(heartbeat_path=hb, book_path=tmp / "book.json", alerter=a, state_path=st,
+                journal_dir=jdir, shadows_root=shadows)
+
+    def events():
+        return [e["payload"]["event"] for e in Journal(jdir).iter(kinds=("watchdog",))]
+
+    assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args) == 0
+    assert a.sent == []
+    # twin stops beating (bold keeps going): one warning, silence on the rechecks
+    (shadows / "bold" / "heartbeat.txt").write_text((NOW + timedelta(minutes=30)).isoformat(),
+                                                    encoding="utf-8")
+    hb.write_text((NOW + timedelta(minutes=30)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=31), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=36), **args) == 1
+    assert a.sent == [("warning", "⚠️ shadow supervisors down")]
+    assert events() == ["shadows_down"]
+    down = [e["payload"] for e in Journal(jdir).iter(kinds=("watchdog",))][0]
+    assert "twin (last beat 31 min ago)" in down["problem"] and "bold" not in down["problem"]
+    # main dies too during the shadow episode: its own critical, its own state key
+    assert watchdog_check(m, now=NOW + timedelta(minutes=50), **args) == 1
+    assert [lvl for lvl, _ in a.sent] == ["warning", "critical"]
+    # main comes back: main's recovery must not forget the open shadow episode
+    hb.write_text((NOW + timedelta(minutes=55)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=56), **args) == 1
+    assert [lvl for lvl, _ in a.sent] == ["warning", "critical", "info"]
+    assert json.loads(st.read_text(encoding="utf-8")).get("shadows_since")
+    # an hour into the shadow outage: one reminder; then twin returns: one info
+    (shadows / "bold" / "heartbeat.txt").write_text((NOW + timedelta(minutes=95)).isoformat(),
+                                                    encoding="utf-8")
+    hb.write_text((NOW + timedelta(minutes=95)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=96), **args) == 1
+    assert a.sent[-1] == ("warning", "shadow supervisors still down")
+    (shadows / "twin" / "heartbeat.txt").write_text((NOW + timedelta(minutes=100)).isoformat(),
+                                                    encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=101), **args) == 0
+    assert a.sent[-1] == ("info", "✅ shadow supervisors are back")
+    assert events() == ["shadows_down", "down", "recovered", "shadows_reminder",
+                        "shadows_recovered"]
+    assert json.loads(st.read_text(encoding="utf-8")) == {}
 
 
 class _CountingAlerter(Alerter):
