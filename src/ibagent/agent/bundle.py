@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -199,13 +199,29 @@ def positions_json(book: Book) -> list:
     return [
         {"symbol": p.symbol, "sleeve": p.sleeve, "qty": p.qty, "avg_cost": p.avg_cost,
          "entry_date": p.entry_date, "entry_price": p.entry_price, "stop": p.stop_price,
+         # 2026-09-22 (MRK) and 09-24 (LLY): scalper measured "R" against the trailed /
+         # tightened stop, which shrinks the denominator every hour, and moved to breakeven
+         # on a first-print "+1R" that was +0.85R on the risk actually taken. The stop at
+         # entry is the R basis; the current stop is not.
+         "entry_stop": p.initial_stop,
          "target": p.target_price, "thesis": p.thesis, "invalidation": p.invalidation,
          "time_stop": p.time_stop_date, "partial_taken": p.partial_taken}
         for p in sorted(book.positions.values(), key=lambda x: x.symbol)]
 
 
-def _breakers_json(book: Book) -> dict:
+def _breakers_json(book: Book, today: Optional[date] = None) -> dict:
     out = {"halted": book.halted, "frozen": book.frozen, "paused_sleeves": book.paused_sleeves}
+    if book.entries_paused(today or datetime.now(timezone.utc).date()):
+        # 2026-09-16 (TMO) and 09-24 (JNJ): scalper's first run after its loss-streak cooldown
+        # started proposed a new entry — the `breaker` journal line is not in journal_tail,
+        # the FILL lines only show the stop-outs, and portfolio.json said nothing about the
+        # pause — and learned of it from the REJECTED line one run later.
+        out["entries_paused_until"] = book.entries_paused_until
+        out["entries_paused_note"] = (
+            "The engine refuses EVERY new entry (trend and spec) through this date, inclusive "
+            "(" + (book.entries_paused_reason or "loss-streak cooldown")[:200] + "). Do not "
+            "propose entries; manage held positions (exits and stop tightening still work) "
+            "and otherwise answer no_change.")
     if book.frozen:
         # 2026-09-21: main's weekly and daily both wrote "breakers.frozen=true — not defined
         # anywhere in the bundle ... please confirm its meaning" (4th frozen day).
@@ -218,7 +234,7 @@ def _breakers_json(book: Book) -> dict:
     return out
 
 
-def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate) -> dict:
+def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate, today: Optional[date] = None) -> dict:
     return {
         "equity": snap.equity,
         "pot_cash": snap.pot_cash,
@@ -227,7 +243,7 @@ def portfolio_json(book: Book, snap: EquitySnapshot, m: Mandate) -> dict:
         "hwm": book.hwm,
         "realized_pnl": book.realized_pnl,
         "week": {"new_positions": book.week_new_positions, "turnover_usd": round(book.week_turnover_usd, 2)},
-        "breakers": {**_breakers_json(book),
+        "breakers": {**_breakers_json(book, today),
                      "consecutive_spec_losers": book.consecutive_spec_losers},
         "cooldowns": book.cooldowns,
         "positions": positions_json(book),
@@ -286,7 +302,7 @@ def build_bundle(m: Mandate, book: Book, snap: EquitySnapshot, stats: Dict[str, 
     (bundle_dir / "TASK.md").write_text(task, encoding="utf-8")
     (bundle_dir / "mandate_excerpt.md").write_text(mandate_excerpt(m, snap.equity), encoding="utf-8")
     (bundle_dir / "portfolio.json").write_text(
-        json.dumps(portfolio_json(book, snap, m), indent=1), encoding="utf-8")
+        json.dumps(portfolio_json(book, snap, m, today=now.date()), indent=1), encoding="utf-8")
     (bundle_dir / "market.json").write_text(
         json.dumps({s: asdict(v) for s, v in stats.items()}, indent=1), encoding="utf-8")
     (bundle_dir / "news_digest.md").write_text(digest_md or "# News digest\n(no items)\n", encoding="utf-8")

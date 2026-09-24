@@ -50,6 +50,37 @@ def test_frozen_breaker_is_explained_to_the_model(tmp_path):
     assert "VTI book=7.0" in br["frozen_note"] and "no_change" in br["frozen_note"]
 
 
+def test_positions_carry_the_entry_stop_and_a_pause_is_explained(tmp_path):
+    """2026-09-24: scalper measured LLY's 'R' against the stop it had tightened at 11:05 ET
+    (+1.3R claimed, +0.84R on the 1145 entry stop) and moved to breakeven; the same morning
+    its daily proposed JNJ 23 min after the 6-loser cooldown began, because nothing in the
+    bundle said entries were paused. Positions now carry `entry_stop`; an active pause is
+    named in breakers with its end date; an expired one is not."""
+    from datetime import date, timedelta
+    from ibagent.agent.bundle import degraded_portfolio_json, positions_json
+    from ibagent.broker.base import Fill
+    from tests.conftest import NOW, TODAY, make_book
+    book = make_book(tmp_path, cash=5000.0)
+    book.apply_fill(Fill("1", "e-LLY", "LLY", "BUY", 1.0, 1173.33, 1.0, NOW), "trend",
+                    entry_meta={"stop_price": 1145.0, "stop_order_tag": "s-LLY"})
+    book.positions["LLY"].stop_price = 1174.5                  # trailed / tightened since
+    (row,) = positions_json(book)
+    assert row["entry_stop"] == 1145.0 and row["stop"] == 1174.5
+    assert "entries_paused_until" not in degraded_portfolio_json(book, "x")["breakers"]
+    from ibagent.agent.bundle import _breakers_json
+    assert "entries_paused_until" not in _breakers_json(book, TODAY)
+    book.pause_entries(TODAY + timedelta(days=2), "6 losing trades in a row (cooldown)")
+    br = _breakers_json(book, TODAY)
+    assert br["entries_paused_until"] == (TODAY + timedelta(days=2)).isoformat()
+    assert "6 losing trades" in br["entries_paused_note"] and "no_change" in br["entries_paused_note"]
+    # the pause is dated (inclusive): the day after it ends, the bundle is silent again
+    assert "entries_paused_until" in _breakers_json(book, TODAY + timedelta(days=2))
+    assert "entries_paused_until" not in _breakers_json(book, TODAY + timedelta(days=3))
+    # the degraded view (no date given) uses the real calendar: a pause ending today is on
+    book.pause_entries(date.today() + timedelta(days=1), "6 losing trades in a row (cooldown)")
+    assert "entries_paused_until" in degraded_portfolio_json(book, "x")["breakers"]
+
+
 def test_system_prompt_says_the_multiplier_does_not_shrink_a_single_weight():
     """2026-09-21: twin wrote 'one share still fits if the engine applies the 0.5 multiplier'
     and got 2 SPY; scalper computed 4 MRK 'x 0.5' and got 9. risk.plan_orders scales only
