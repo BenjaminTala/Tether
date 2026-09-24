@@ -260,6 +260,31 @@ def test_event_gate_fires_each_headline_once_per_day():
                             NOW + timedelta(days=1))
 
 
+def test_event_gate_treats_a_republished_link_as_the_same_headline():
+    """2026-09-24: CNBC re-issued the Palo Alto CEO piece 40 min later with the double slash
+    in its URL fixed (new feed id, new link, same title) and sniper ran it twice, 13:47 and
+    15:08 UTC. A fired headline is remembered by title as well as by link."""
+    scored = score_items(items(), ["AAPL"])
+    st = EventGateState()
+    assert check_event_gate(gate_cfg(), st, scored, {"AAPL"}, set(), {"AAPL": -0.05}, NOW)
+    rss = RSS.replace(b"https://x.test/apple-q3", b"https://x.test//apple-q3?utm=rss")
+    republished = score_items(parse_feed("https://feed.test/rss", rss, NOW), ["AAPL"])
+    assert republished[0].item.link != scored[0].item.link      # a genuinely new item
+    later = NOW + timedelta(hours=3)
+    assert check_event_gate(gate_cfg(), st, republished, {"AAPL"}, set(), {"AAPL": -0.05},
+                            later) is None
+    assert st.count_today == 1
+    # the memory survives a round-trip, and a different story on the same day still fires
+    st2 = EventGateState.from_dict(st.as_dict())
+    assert check_event_gate(gate_cfg(), st2, republished, {"AAPL"}, set(), {"AAPL": -0.05},
+                            later) is None
+    other = RSS.replace(b"Apple beats estimates, raises guidance", b"Apple agrees merger with Disney") \
+               .replace(b"https://x.test/apple-q3", b"https://x.test/apple-merger")
+    fresh = score_items(parse_feed("https://feed.test/rss", other, NOW), ["AAPL"])
+    assert fresh[0].score >= gate_cfg().min_materiality
+    assert check_event_gate(gate_cfg(), st2, fresh, {"AAPL"}, set(), {"AAPL": -0.05}, later)
+
+
 def test_event_gate_requires_move_and_holding():
     scored = score_items(items(), ["AAPL"])
     st = EventGateState()

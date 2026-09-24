@@ -42,7 +42,8 @@ from ibagent.llm.runner import ClaudeCodeRunner, LLMRunner
 from ibagent.marketclock import (in_no_trade_window, is_rth, is_trading_day,
                                  previous_trading_day, session, utc)
 from ibagent.news.ingest import DEFAULT_FEEDS, NewsStore, poll as news_poll
-from ibagent.news.scoring import (EventGateState, build_digest, check_event_gate, score_items)
+from ibagent.news.scoring import (EventGateState, build_digest, check_event_gate, score_items,
+                                  trigger_keys)
 from ibagent.schemas import decision_json_schema_text
 from ibagent.telegram_in import HELP_TEXT, classify, poll as tg_poll
 from ibagent.sleeves import core_rebalance, evaluate_breakers, protective_actions, sleeve_pause_until
@@ -791,9 +792,9 @@ class Supervisor:
                 # turtle, and the fired-key made it unanalyzable for the rest of the day).
                 # last_trigger_ts stays: the cooldown still spaces the re-fire.
                 gate = EventGateState.from_dict(self.state.event_gate)
-                key = trigger.link or trigger.headline
-                if key in gate.fired_keys:
-                    gate.fired_keys.remove(key)
+                keys = trigger_keys(trigger.headline, trigger.link)
+                if any(k in gate.fired_keys for k in keys):
+                    gate.fired_keys = [k for k in gate.fired_keys if k not in keys]
                     gate.count_today = max(0, gate.count_today - 1)
                     self.state.event_gate = gate.as_dict()
                 self._llm_backoff(now, "event")

@@ -237,7 +237,7 @@ def check_event_gate(cfg: EventCfg, state: EventGateState, scored: Sequence[Scor
         # cooldown on all 7 variants (3-4 runs each, 24 fleet-wide) and every run said
         # "same headline, same answer". The digest keeps items for 36h, so without this a
         # stale story eats the day's whole event budget on nothing new.
-        if _trigger_key(s.item) in state.fired_keys:
+        if any(k in state.fired_keys for k in trigger_keys(s.item.title[:200], s.item.link)):
             continue
         for sym in s.symbols:
             if sym not in held and sym not in watched:
@@ -252,9 +252,19 @@ def check_event_gate(cfg: EventCfg, state: EventGateState, scored: Sequence[Scor
     best = max(candidates, key=lambda t: (t.score, abs(t.move_pct)))
     state.count_today += 1
     state.last_trigger_ts = now.timestamp()
-    state.fired_keys.append(best.link or best.headline)
+    state.fired_keys.extend(k for k in trigger_keys(best.headline, best.link)
+                            if k not in state.fired_keys)
     return best
 
 
-def _trigger_key(item) -> str:
-    return item.link or item.title[:200]
+def trigger_keys(headline: str, link: str) -> Tuple[str, ...]:
+    """Every key under which a fired headline is remembered: its link AND its normalised
+    title. 2026-09-24: CNBC re-issued "Palo Alto CEO says slowing down AI is 'unrealistic'"
+    40 min after the first copy with the double slash in its URL fixed — a new feed id and a
+    new link under the same title — and the link-only memory let sniper run it twice
+    (13:47 and 15:08 UTC, both Soft, both no_change). The same story under a corrected or
+    tracking-suffixed link is the same story."""
+    keys = [" ".join(headline.lower().split())]
+    if link:
+        keys.append(link)
+    return tuple(keys)
