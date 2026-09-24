@@ -54,6 +54,17 @@
   (LLY only, paused to 09-28), main −152.09. Gateway auto-restart still 11:45 AM local (10th
   day): all 7 dropped 16:45:00–58 UTC, back by 16:47 (main's tick died in `fills_since`, as
   every day). No watchdog episode on main or the shadows today; `watchdog_state.json` `{}`.
+- **DEPLOYED 22:48–22:50 UTC, six shadows only, foreground, one task at a time** (`schtasks
+  /End` → Ready → `/Run` → heartbeat within 1–2 s → `reconnected`): bold 22:48:18, scalper
+  22:48:24, sniper 22:48:29, swing 22:48:34, turtle 22:50:13, twin 22:50:18; `sim_stops_restored`
+  on bold (SPY), scalper (LLY), twin (SPY); all six Running; main untouched and beating on
+  its 5-min off-hours cadence (22:45:25, 22:50:40). **bold's first bars pass after the
+  restart FAILED** (`no historical bars` NVDA 22:48:53, AAPL 22:49:13, VTI 22:49:33 →
+  `history unavailable; rest of pass skipped` → `bars_stale_served`, today's bars from the
+  cache) while the other five logged nothing. 09-21's finding was that a failed first pass
+  after a redeploy preceded every dead morning; last night no shadow failed its first pass
+  and the morning was clean. Tomorrow tells whether the predictor is per-connection: if bold
+  alone is on stale bars until 16:45 UTC, "first pass failed" is the signature to keep.
 - Written down, not changed: the `trail_stop SPY qty=0.0` wording in `protective` lines
   (cosmetic, second night); trail min-step (twin 1 today, bold 8); no scorer change for
   "<CEO> says …" commentary (one variant at its 0.65 gate; the tag came from the summary);
