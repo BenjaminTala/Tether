@@ -102,7 +102,13 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    correctly held; the 12:07 ET scan used the same arithmetic to move the stop to
    breakeven "after >+1R" on the FIRST day above +1R. A trailed stop shrinks the
    denominator every hour, so "R" against it is always inflated; the rule above needs
-   +1R on the ORIGINAL risk, held for a session.)
+   +1R on the ORIGINAL risk, held for a session.
+   2026-09-24, the same mistake with a stop YOU tightened: scalper moved LLY's stop from
+   1146.98 to 1155 at 11:05 ET, then wrote "entry stop 1155" in the next run and at 12:36 ET
+   read 1197.22 as "+1.3R -> breakeven". On the 1145 stop at the fill it was +0.84R, and
+   the position faded to 1187 by the close, 1.1% over the new stop. portfolio.json now
+   carries `entry_stop` on every position: R = (price − entry_price) / (entry_price −
+   entry_stop), always; `stop` is where the exit sits today, never the denominator.)
 15. **A sympathy move is not your catalyst.** On 2026-09-03 "Snowflake Soars 23% …
    Oracle Advances 3%" and "HPE Earnings Top Estimates Amid Oracle AI Data Center Deal"
    each fired ~6 variants on ORCL (+4–5%): 12+ runs, all no_change, all the same triage.
@@ -132,7 +138,13 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    under entry on a 2%-ATR ETF — put it in cooldown; its TMO proposal 3 h later was REJECTED
    and the next run wrote "appears not to have filled". journal_tail.md carries `FILL` and
    `REJECTED` lines verbatim: read them before writing "verify in fills log" or "did not
-   fill". An order that never reaches the broker is a refusal, not a miss.)
+   fill". An order that never reaches the broker is a refusal, not a miss.
+   2026-09-24 addendum: scalper's 6th straight loser (MRK and SMH stopped out 09:31 and
+   09:48 ET, −11.72 and −34.04) started a cooldown to 09-28, and the 09:54 daily proposed
+   JNJ into it — REJECTED, one more "do not re-propose" line. Two stop-out FILL lines in
+   journal_tail on a losing streak mean the counter moved; portfolio.json `breakers` now
+   names an active pause (`entries_paused_until` and a note). When it is there, the run's
+   only jobs are managing what is held and saying so in one line.)
 18. **After a dark day, the first run back is a fresh daily, not a catch-up.** The whole
    fleet was off for all of 2026-09-09 (PC off; GTC stops at IBKR were the only live
    defence — lesson 6). If the bundle shows a gap spanning a trading session: reconcile

@@ -1,5 +1,65 @@
 # Live-session learnings
 
+## 2026-09-24 (Thursday night, engineer) — the history farm was ALIVE after last night's six-shadow restart (the "evening connection never gets a farm" hypothesis is refuted on its first test); scalper's 6th loser, a JNJ proposal into the cooldown, and LLY moved to breakeven on R against a stop it had tightened itself; sniper ran the same CNBC headline twice because CNBC fixed a double slash in the URL
+
+- **The farm was fine this morning on all 7, after six shadows were restarted 22:43–22:48
+  UTC last night.** Zero `no historical bars` / `history unavailable` lines on any variant
+  between the restarts and the close (the only bars warning all day: sniper GOOGL at 21:20
+  UTC, one symbol); scalper's 13:39 UTC `bars_refresh` was `fetched 16, failed []` (the
+  `today: 0` is 09:39 ET before IB has a daily bar, as read on 09-17) and 15/15 at 14:06.
+  So last night's reading — "a connection made in the evening window never gets a farm
+  subscription until the Gateway restarts" — is wrong on its first test. Samples now: 09-22
+  no restart → clean; 09-23 main restarted 22:47 and 00:38 → dead until 16:45; 09-24 six
+  shadows restarted 22:43–22:48, main untouched → clean everywhere. No client-side rule
+  (burst, stagger, evening timing, "one fresh client") fits all three. **Stop theorising
+  from here**: the on-disk `bars_cache.json` fallback covers a dead morning, `bars_recovered`
+  marks the heal, and the only real cure remains the Gateway restart the owner can move.
+  Tonight's deploy is shadows-only again (main's connection alive since 16:46 UTC), which
+  gives the same shape a second sample.
+- **Fix (event gate, deployed to the shadows): a fired headline is remembered by its title
+  as well as its link.** CNBC published "Palo Alto CEO says slowing down AI is 'unrealistic',
+  extinction threat 'extremely small'" at 11:45 UTC with `/2026/09/24//palo-alto-…` (double
+  slash) and re-issued it at 12:24 with the slash fixed — new feed id, new link, same title,
+  in all 7 stores. `fired_keys` held the first link only, so sniper (NVDA-tagged via "Jensen
+  Huang" in the summary; 0.65 clears only sniper's lower gate) ran it at 13:47 and again at
+  15:08 UTC: two Soft triages, two `no_change`, one budget slot wasted. Only instance this
+  month in any journal or store, but the shape (corrected or tracking-suffixed link) is
+  generic. The usage-limit refund removes both keys. Test: a republished link is skipped, the
+  count stays 1, the memory round-trips, and a different material story still fires.
+- **Fix (bundle, deployed to the shadows): positions carry `entry_stop`; an active entry
+  pause is named in `breakers`.** (a) scalper's LLY (1 sh @ 1173.33, stop 1145 at entry):
+  the engine trailed to 1146.98; the 11:05 ET scan tightened to 1155 "under today's open";
+  the 11:36 scan then called 1155 the "entry stop"; the 12:36 scan read 1197.22 as "+1.3R
+  -> breakeven 1174.50". On the 1145 stop actually risked at entry it was +0.84R — the
+  09-22 MRK mistake again, this time against its own tighten. LLY faded to ~1189 at the
+  close, 1.2% over the stop. The book has always stored `initial_stop`; the model never saw
+  it. (b) MRK's sim stop filled 13:31:00 UTC (148.48, −11.72) and SMH's at 13:48 (589.60,
+  −34.04): 6th straight loser → `entries paused until 2026-09-28`. The 13:54 daily proposed
+  JNJ 0.085 anyway → `REJECTED entry JNJ: entries paused …`. The `breaker` line is not one
+  of journal_tail's kinds and portfolio.json said nothing about the pause (`cooldowns` is
+  the per-symbol re-entry list — 09-17's "no active cooldowns" read that field). Same shape
+  as 09-16's TMO. `breakers` now carries `entries_paused_until` and a note while the pause
+  is active (dated, inclusive; silent once it lapses). The later 12 scans all wrote "entries
+  blocked, per the JNJ rejection" and re-proposed nothing — lesson 17 held. Fleet lessons 14
+  and 17 get the addenda. Bundle text only; risk code untouched.
+- **bold bought SPY 1 @ 764.90** (13:52 UTC daily, `SPY:trend:0.08` — "1 share, half size
+  per neutral", the second variant to write the weight it means, lesson 19), stop 741 →
+  engine-trailed to 751.87 in 8 replacements (twin's min-step note now applies to bold too).
+  scalper's LLY had a real Hard item — FDA approval of Onswik (once-weekly insulin), +2.5% —
+  and the model held with the stop unchanged at +0.3R: correct.
+- Session otherwise: 5 dailies `no_change` (main, sniper, swing, turtle, twin — all on the
+  same read: 10y ~5.11–5.15% highest since 2007, leaders 2.2–2.3 ATR over ma20, neutral).
+  main day −1.98, all-time −152.09; SPY 1 @ 770.64 sits 1.5% over its 755.44 stop. Standings:
+  twin −22.80, turtle −33.65, swing −64.01, bold −76.49, sniper −100.81, scalper −118.49
+  (LLY only, paused to 09-28), main −152.09. Gateway auto-restart still 11:45 AM local (10th
+  day): all 7 dropped 16:45:00–58 UTC, back by 16:47 (main's tick died in `fills_since`, as
+  every day). No watchdog episode on main or the shadows today; `watchdog_state.json` `{}`.
+- Written down, not changed: the `trail_stop SPY qty=0.0` wording in `protective` lines
+  (cosmetic, second night); trail min-step (twin 1 today, bold 8); no scorer change for
+  "<CEO> says …" commentary (one variant at its 0.65 gate; the tag came from the summary);
+  scalper's 12 scans while holding LLY under a pause are by design (exits never gated — it
+  used them to manage the stop, twice); universe warm-up; `--strict-mcp-config`.
+
 ## 2026-09-23 (Wednesday night, engineer) — the six shadows sat DEAD through the whole session: last night's engineer stopped all 7 for the redeploy, backgrounded the staggered start, ended its turn and was gone; the watchdog (main-only) called it healthy; main unfrozen by the owner and back in SPY
 
 - **All six shadows were down from 22:42 UTC 09-22 to 22:43–22:48 UTC tonight — 24 h, the
