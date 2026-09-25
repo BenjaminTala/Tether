@@ -20,6 +20,13 @@ with its own hysteresis and a warning rather than a 🚨: a dead shadow risks no
 through the whole 09-23 session while this watchdog — main-only until then — reported
 healthy and nobody was told.
 
+A stale heartbeat has to be seen on TWO consecutive runs before an episode opens. On the
+night of 2026-09-25 every supervisor's off-hours tick took ~5.5 min from 04:15 to 08:59 UTC
+(5-min loop + slow tick = beats 10-11 min apart against the 10-min limit) and the watchdog
+sent 15 down + 15 recovered messages, each "outage" exactly one 5-min run long. A first
+sighting is journaled as `stale_once` / `shadows_stale_once` (the evidence a slow tick
+otherwise leaves nowhere) and cleared by a fresh beat; a real outage alerts one run later.
+
 Exit codes (for Task Scheduler history): 0 healthy, 1 stale/missing heartbeat.
 """
 from __future__ import annotations
@@ -105,15 +112,21 @@ def _check_shadows(now: datetime, stale_s: float, root: Path, state: dict,
             state.pop("shadows_since", None)
             state.pop("shadows_alert_ts", None)
             _save_state(state_path, state)
+        elif state.pop("shadows_suspect_since", None):
+            _save_state(state_path, state)                # one slow tick, beating again: silent
         return 0
     problem = ", ".join(down)
-    if not state.get("shadows_since"):
+    if not state.get("shadows_since") and not state.get("shadows_suspect_since"):
+        state["shadows_suspect_since"] = now.isoformat(timespec="seconds")   # one slow tick?
+        _save_state(state_path, state)
+        _journal(journal_dir, now, {"event": "shadows_stale_once", "problem": problem})
+    elif not state.get("shadows_since"):
         alerter.warning("⚠️ shadow supervisors down",
                         f"{problem}. Shadows are paper sims — nothing at the broker is "
                         "affected — but their A/B record has a hole until each task is "
                         "started again (Start-ScheduledTask IBAgent-Shadow-<name>). "
                         "I'll remind you hourly.")
-        state["shadows_since"] = now.isoformat(timespec="seconds")
+        state["shadows_since"] = state.pop("shadows_suspect_since")    # down since 1st sighting
         state["shadows_alert_ts"] = now.timestamp()
         _save_state(state_path, state)
         _journal(journal_dir, now, {"event": "shadows_down", "problem": problem})
@@ -172,14 +185,21 @@ def _check_main(m: Mandate, now: datetime, stale_s: float, heartbeat_path: Path,
                                         "down_minutes": _down_minutes(state, now)})
         state.pop("stale_since", None)                    # keep any shadow episode's keys
         state.pop("last_alert_ts", None)
+        state.pop("suspect_since", None)
         _save_state(state_path, state)
         return 0
 
-    if not state.get("stale_since"):                      # NEW outage: one loud alert
+    if not state.get("stale_since") and not state.get("suspect_since"):
+        # First sighting: a tick over 5 min looks exactly like this. Record it, alert only
+        # if the next run still finds it stale (a real outage is never one run long).
+        state["suspect_since"] = now.isoformat(timespec="seconds")
+        _save_state(state_path, state)
+        _journal(journal_dir, now, {"event": "stale_once", "problem": problem})
+    elif not state.get("stale_since"):                    # NEW outage: one loud alert
         alerter.critical("🚨 supervisor down",
                          f"{problem}. Your positions stay protected by the GTC stops at IBKR. "
                          "I'll remind you hourly until it's back.")
-        state.update({"stale_since": now.isoformat(timespec="seconds"),
+        state.update({"stale_since": state.pop("suspect_since"),
                       "last_alert_ts": now.timestamp()})   # update, not replace: shadow keys stay
         _save_state(state_path, state)
         _journal(journal_dir, now, {"event": "down", "problem": problem})

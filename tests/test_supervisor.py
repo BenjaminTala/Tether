@@ -12,7 +12,7 @@ from ibagent.broker.sim import SimBroker, SimConfig
 from ibagent.config import mandate_from_dict
 from ibagent.journal import Journal
 from ibagent.llm.runner import FakeRunner, RunResult
-from ibagent.supervisor import Supervisor
+from ibagent.supervisor import Supervisor, TickGuard
 from ibagent.watchdog import check as watchdog_check
 from tests.conftest import NOW
 
@@ -254,27 +254,38 @@ def test_watchdog(env, tmp_path):
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args) == 0
     assert a.sent == []                                    # healthy, never-stale: silent
     assert journaled() == []                               # ...and nothing journaled either
-    # outage begins: exactly ONE critical, then silence on the 5-min rechecks
-    assert watchdog_check(m, now=NOW + timedelta(minutes=30), **args) == 1
+    # one slow tick (2026-09-25: beats 10-11 min apart all night): a journal line, no alert,
+    # and a fresh beat on the next run clears it silently
+    hb.write_text((NOW + timedelta(minutes=9)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=20), **args) == 1
+    hb.write_text((NOW + timedelta(minutes=22)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=25), **args) == 0
+    assert a.sent == []
+    assert [p["event"] for _, p in journaled()] == ["stale_once"]
+    assert json.loads(st.read_text(encoding="utf-8")) == {}
+    # outage begins: sighted twice -> exactly ONE critical, then silence on the 5-min rechecks
     assert watchdog_check(m, now=NOW + timedelta(minutes=35), **args) == 1
+    assert a.sent == []
     assert watchdog_check(m, now=NOW + timedelta(minutes=40), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=45), **args) == 1
     assert [lvl for lvl, _ in a.sent] == ["critical"]
     # an hour in: one warning reminder
-    assert watchdog_check(m, now=NOW + timedelta(minutes=95), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=101), **args) == 1
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning"]
     # recovery: one info, state cleared
-    hb.write_text((NOW + timedelta(minutes=100)).isoformat(), encoding="utf-8")
-    assert watchdog_check(m, now=NOW + timedelta(minutes=101), **args) == 0
+    hb.write_text((NOW + timedelta(minutes=105)).isoformat(), encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=106), **args) == 0
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info"]
     # the journal mirrors the alert sequence one-to-one (08-25: "did the watchdog fire?"
     # was unanswerable after the fact because the state file is wiped on recovery)
-    lines = journaled()
-    assert [p["event"] for _, p in lines] == ["down", "reminder", "recovered"]
-    assert lines[0][0] == (NOW + timedelta(minutes=30)).isoformat(timespec="seconds")
-    assert "last beat 30 min ago" in lines[0][1]["problem"]
-    assert lines[1][1]["down_minutes"] == pytest.approx(65.0)
-    assert lines[2][1]["since"] == (NOW + timedelta(minutes=30)).isoformat(timespec="seconds")
-    assert lines[2][1]["down_minutes"] == pytest.approx(71.0)
+    lines = journaled()[1:]
+    assert [p["event"] for _, p in lines] == ["stale_once", "down", "reminder", "recovered"]
+    assert lines[1][0] == (NOW + timedelta(minutes=40)).isoformat(timespec="seconds")
+    assert "last beat 18 min ago" in lines[1][1]["problem"]
+    # the episode is dated from the FIRST sighting, not the alert
+    assert lines[2][1]["down_minutes"] == pytest.approx(66.0)
+    assert lines[3][1]["since"] == (NOW + timedelta(minutes=35)).isoformat(timespec="seconds")
+    assert lines[3][1]["down_minutes"] == pytest.approx(71.0)
     # missing heartbeat while a book exists = same episode logic
     missing = tmp / "nope.txt"
     (tmp / "book.json").write_text("{}", encoding="utf-8")
@@ -283,14 +294,16 @@ def test_watchdog(env, tmp_path):
     assert watchdog_check(m, now=NOW, **args2) == 1
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args2) == 1
     assert [lvl for lvl, _ in a.sent] == ["critical", "warning", "info", "critical"]
-    assert [p["event"] for _, p in journaled()] == ["down", "reminder", "recovered", "down"]
+    assert [p["event"] for _, p in journaled()][-2:] == ["stale_once", "down"]
     # an unwritable journal (OneDrive lock) must never swallow the alert
     st.write_text("{}", encoding="utf-8")                  # fresh episode
     blocked = tmp / "blocked-journal"
     blocked.write_text("not a directory", encoding="utf-8")
     args3 = dict(args2, journal_dir=blocked)
     assert watchdog_check(m, now=NOW + timedelta(minutes=10), **args3) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=15), **args3) == 1
     assert [lvl for lvl, _ in a.sent][-1] == "critical"
+    assert len(a.sent) == 5
 
 
 def test_watchdog_covers_shadows(env, tmp_path):
@@ -319,36 +332,52 @@ def test_watchdog_covers_shadows(env, tmp_path):
 
     assert watchdog_check(m, now=NOW + timedelta(minutes=5), **args) == 0
     assert a.sent == []
-    # twin stops beating (bold keeps going): one warning, silence on the rechecks
+    # twin has one slow tick (09-25: scalper/sniper 12 times in 4 h): journal line, no alert
+    hb.write_text((NOW + timedelta(minutes=15)).isoformat(), encoding="utf-8")
+    (shadows / "bold" / "heartbeat.txt").write_text((NOW + timedelta(minutes=15)).isoformat(),
+                                                    encoding="utf-8")
+    (shadows / "twin" / "heartbeat.txt").write_text((NOW + timedelta(minutes=9)).isoformat(),
+                                                    encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=20), **args) == 1
+    (shadows / "twin" / "heartbeat.txt").write_text((NOW + timedelta(minutes=21)).isoformat(),
+                                                    encoding="utf-8")
+    assert watchdog_check(m, now=NOW + timedelta(minutes=25), **args) == 0
+    assert a.sent == [] and events() == ["shadows_stale_once"]
+    assert json.loads(st.read_text(encoding="utf-8")) == {}
+    # twin stops beating (bold keeps going): one warning on the 2nd sighting, then silence
     (shadows / "bold" / "heartbeat.txt").write_text((NOW + timedelta(minutes=30)).isoformat(),
                                                     encoding="utf-8")
     hb.write_text((NOW + timedelta(minutes=30)).isoformat(), encoding="utf-8")
-    assert watchdog_check(m, now=NOW + timedelta(minutes=31), **args) == 1
-    assert watchdog_check(m, now=NOW + timedelta(minutes=36), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=32), **args) == 1
+    assert a.sent == []
+    assert watchdog_check(m, now=NOW + timedelta(minutes=37), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=39), **args) == 1
     assert a.sent == [("warning", "⚠️ shadow supervisors down")]
-    assert events() == ["shadows_down"]
-    down = [e["payload"] for e in Journal(jdir).iter(kinds=("watchdog",))][0]
-    assert "twin (last beat 31 min ago)" in down["problem"] and "bold" not in down["problem"]
+    assert events() == ["shadows_stale_once", "shadows_stale_once", "shadows_down"]
+    down = [e["payload"] for e in Journal(jdir).iter(kinds=("watchdog",))][-1]
+    assert "twin (last beat 16 min ago)" in down["problem"] and "bold" not in down["problem"]
     # main dies too during the shadow episode: its own critical, its own state key
+    assert watchdog_check(m, now=NOW + timedelta(minutes=45), **args) == 1
     assert watchdog_check(m, now=NOW + timedelta(minutes=50), **args) == 1
     assert [lvl for lvl, _ in a.sent] == ["warning", "critical"]
     # main comes back: main's recovery must not forget the open shadow episode
     hb.write_text((NOW + timedelta(minutes=55)).isoformat(), encoding="utf-8")
     assert watchdog_check(m, now=NOW + timedelta(minutes=56), **args) == 1
     assert [lvl for lvl, _ in a.sent] == ["warning", "critical", "info"]
-    assert json.loads(st.read_text(encoding="utf-8")).get("shadows_since")
+    assert json.loads(st.read_text(encoding="utf-8")).get("shadows_since") \
+        == (NOW + timedelta(minutes=32)).isoformat(timespec="seconds")
     # an hour into the shadow outage: one reminder; then twin returns: one info
     (shadows / "bold" / "heartbeat.txt").write_text((NOW + timedelta(minutes=95)).isoformat(),
                                                     encoding="utf-8")
     hb.write_text((NOW + timedelta(minutes=95)).isoformat(), encoding="utf-8")
-    assert watchdog_check(m, now=NOW + timedelta(minutes=96), **args) == 1
+    assert watchdog_check(m, now=NOW + timedelta(minutes=97), **args) == 1
     assert a.sent[-1] == ("warning", "shadow supervisors still down")
     (shadows / "twin" / "heartbeat.txt").write_text((NOW + timedelta(minutes=100)).isoformat(),
                                                     encoding="utf-8")
     assert watchdog_check(m, now=NOW + timedelta(minutes=101), **args) == 0
     assert a.sent[-1] == ("info", "✅ shadow supervisors are back")
-    assert events() == ["shadows_down", "down", "recovered", "shadows_reminder",
-                        "shadows_recovered"]
+    assert events()[3:] == ["stale_once", "down", "recovered", "shadows_reminder",
+                            "shadows_recovered"]
     assert json.loads(st.read_text(encoding="utf-8")) == {}
 
 
@@ -931,6 +960,30 @@ def test_tick_guard_aborts_a_wedged_tick_and_journals_the_blocking_stack(env):
     assert p["stage"] == "quote SPY" and p["elapsed_s"] >= 0
     assert "_wedged_broker_call" in p["stack"]           # the evidence the 09-16 journal lacked
     assert sup.guard.check() is False                    # fires once, never twice
+
+
+def test_slow_tick_is_journaled_with_where_the_time_went(env):
+    """2026-09-25 04:15-08:59 UTC: every variant's off-hours tick took ~5.5 min (beats 10-11
+    min apart, 15 false watchdog episodes) and no journal line said which stage was slow."""
+    m, broker, sup, clock, tmp = env
+    t = [1000.0]
+    sup.guard = TickGuard(sup._tick_stalled, clock=lambda: t[0])
+    sup.guard.arm(900, "tick")
+    sup.guard.progress("news_poll"); t[0] += 310
+    sup.guard.progress("quote SPY"); t[0] += 20
+    sup.guard.progress("quote VTI"); t[0] += 20
+    sup.guard.progress("reconcile"); t[0] += 0.2          # sub-second stages are left out
+    sup.guard.disarm()
+    sup._note_slow_tick(352.0, 300)
+    (p,) = [e["payload"] for e in _journal_kinds(tmp, "tick_slow")]
+    assert p["elapsed_s"] == 352 and p["interval_s"] == 300
+    assert p["stages"] == {"news_poll": 310, "quote": 40}   # per family, slowest first
+    sup.guard.arm(900, "tick")                             # a new tick starts from zero
+    sup.guard.progress("bars SPY"); t[0] += 3
+    sup.guard.disarm()
+    assert sup.guard.stage_seconds() == {"bars": 3}
+    sup._note_slow_tick(120.0, 300)                        # inside the interval: silent
+    assert len(_journal_kinds(tmp, "tick_slow")) == 1
 
 
 def test_tick_guard_respects_progress_model_allowance_and_disarm(env):

@@ -64,11 +64,13 @@ class TickGuard:
     line. The tick marks progress per stage; a daemon thread that sees no mark for the
     allowance calls `on_stall(stage, elapsed, stack)` with the tick thread's stack."""
 
-    def __init__(self, on_stall: Callable[[str, float, str], None], poll_s: float = 5.0):
-        self._on_stall, self._poll_s = on_stall, poll_s
+    def __init__(self, on_stall: Callable[[str, float, str], None], poll_s: float = 5.0,
+                 clock: Callable[[], float] = time.monotonic):
+        self._on_stall, self._poll_s, self._clock = on_stall, poll_s, clock
         self._stage, self._t0, self._allow_s = "", 0.0, 0.0
         self._armed = self._fired = False
         self._ident = threading.get_ident()
+        self._stage_s: Dict[str, float] = {}       # seconds per stage family, this tick
 
     def start(self) -> None:
         self._ident = threading.get_ident()
@@ -76,13 +78,24 @@ class TickGuard:
 
     def arm(self, allow_s: float, stage: str = "tick") -> None:
         self._allow_s, self._armed, self._fired = allow_s, True, False
+        self._stage, self._stage_s = "", {}
         self.progress(stage)
 
     def disarm(self) -> None:
+        self.progress("done")
         self._armed = False
 
     def progress(self, stage: str) -> None:
-        self._stage, self._t0 = stage, time.monotonic()
+        now = self._clock()
+        if self._stage:                                   # "quote SPY" and "quote VTI" -> "quote"
+            key = self._stage.split(" ", 1)[0]
+            self._stage_s[key] = self._stage_s.get(key, 0.0) + (now - self._t0)
+        self._stage, self._t0 = stage, now
+
+    def stage_seconds(self, top: int = 6) -> Dict[str, int]:
+        """Where this tick's time went, slowest families first."""
+        ranked = sorted(self._stage_s.items(), key=lambda kv: -kv[1])[:top]
+        return {k: round(v) for k, v in ranked if v >= 0.5}
 
     @contextlib.contextmanager
     def allow(self, seconds: float, stage: str):
@@ -98,7 +111,7 @@ class TickGuard:
         """One poll; True if the stall handler fired. Public so tests need no thread."""
         if not self._armed or self._fired:
             return False
-        elapsed = (now_mono if now_mono is not None else time.monotonic()) - self._t0
+        elapsed = (now_mono if now_mono is not None else self._clock()) - self._t0
         if elapsed <= self._allow_s:
             return False
         self._fired = True
@@ -272,6 +285,7 @@ class Supervisor:
             interval = self.m.cadence.fast_loop_seconds if is_rth(now) \
                 else self.m.cadence.slow_loop_seconds
             self.guard.arm(max(3 * interval, TICK_STALL_MIN_S))
+            t0 = time.monotonic()
             try:
                 self.tick(now)
             except Exception as exc:                      # a tick must never kill the process
@@ -279,7 +293,21 @@ class Supervisor:
                                               "trace": traceback.format_exc()[-1500:]})
                 self.alerter.critical("supervisor tick failed", repr(exc)[:500])
             self.guard.disarm()
+            self._note_slow_tick(time.monotonic() - t0, interval)
             self.sleep(interval)
+
+    def _note_slow_tick(self, took_s: float, interval: float) -> None:
+        """A tick longer than its loop interval doubles the heartbeat gap. 2026-09-25: every
+        variant's off-hours tick took ~5.5 min from 04:15 to 08:59 UTC — beats 10-11 min
+        apart, 15 false watchdog episodes — and not one journal line said where the time
+        went (per-call timeouts fire silently; the news poll swallows its errors)."""
+        if took_s <= interval:
+            return
+        try:
+            self.journal.record("tick_slow", {"elapsed_s": round(took_s), "interval_s": interval,
+                                              "stages": self.guard.stage_seconds()})
+        except Exception:
+            pass                                          # a diagnostic must never take the loop down
         self.alerter.info("supervisor stopped", "clean shutdown")
 
     def run_agent_once(self, run_type: str) -> None:
