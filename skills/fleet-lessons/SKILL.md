@@ -108,7 +108,11 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    read 1197.22 as "+1.3R -> breakeven". On the 1145 stop at the fill it was +0.84R, and
    the position faded to 1187 by the close, 1.1% over the new stop. portfolio.json now
    carries `entry_stop` on every position: R = (price − entry_price) / (entry_price −
-   entry_stop), always; `stop` is where the exit sits today, never the denominator.)
+   entry_stop), always; `stop` is where the exit sits today, never the denominator.
+   2026-09-25: that LLY breakeven stop filled at 1171.58 (−$3.76) at 10:10 ET the next
+   morning, and LLY then fell to ~1161 — right in outcome this time, wrong in method. That
+   is the whole point: breakeven is "flat and out" whichever way the tape goes; choose it
+   because you accept that, never because the R arithmetic said so.)
 15. **A sympathy move is not your catalyst.** On 2026-09-03 "Snowflake Soars 23% …
    Oracle Advances 3%" and "HPE Earnings Top Estimates Amid Oracle AI Data Center Deal"
    each fired ~6 variants on ORCL (+4–5%): 12+ runs, all no_change, all the same triage.
@@ -116,6 +120,12 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    DIFFERENT company and your symbol merely "advances"/"rises" alongside it, the move is
    second-order and already priced by the time you see it: say so in one line and
    `no_change`. Trading the sympathy name needs its OWN thesis, not a neighbor's print.
+   (2026-09-25: "Oracle Japan shares surge 7% after record fiscal first quarter, bucking
+   selloff of U.S. parent" (0.7) fired four variants on ORCL −3 to −6%, all `no_change` —
+   a listed subsidiary's print is a different company's catalyst. Same day sniper got "CEO
+   who posted 'Lake America' sweatshirt photos is no longer with the company" tagged META
+   because the post was on Facebook: a product name in the text is not the company. First
+   check, before any triage: is the company in the headline actually your symbol?)
 16. **Materiality is a headline score, not an economic one — a dollar figure is only Hard
    relative to the company's size.** "Novartis India acquires Pfizer brands for $132m"
    scored 0.8 (M&A pattern) on 2026-09-08 and fired six variants; every one fetched the

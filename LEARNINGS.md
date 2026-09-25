@@ -1,5 +1,81 @@
 # Live-session learnings
 
+## 2026-09-25 (Friday night, engineer) — the history farm was dead on ALL 7 this morning, including main, which nobody restarted; overnight every tick took ~5.5 min and the watchdog flapped 15 times on five-minute "outages"; sniper and swing bought SPY at half size; scalper's breakeven LLY stop tagged (8th loser, paused to 09-29)
+
+- **Dead farm, fleet-wide, with main untouched.** All six shadows' FIRST pass after the
+  22:48–22:50 UTC restart failed (bold 22:48:53, scalper 22:54:06, sniper 22:54:08, swing
+  22:54:08, turtle 22:55:45, twin 22:55:53 — last night's "the other five logged nothing"
+  was written at 22:51, before their first passes ran). Main's connection had been up since
+  16:46 UTC 09-24 with a clean farm all session, and its 00:01 UTC pass failed too (SGOV,
+  VTI, AVGO → `history unavailable; rest of pass skipped`), then 02:06 GOOGL, then every
+  RTH pass until `bars_recovered` 16:47:20–27 UTC, right after the Gateway's 16:45 restart
+  (11th day at 11:45 AM local). Same on all six shadows (00:03–00:06 and 02:01–02:07 UTC
+  failures, `bars_stale_served last_bar 2026-09-23` all morning, `bars_recovered` 16:46–16:53).
+  So the dead-farm state belongs to the GATEWAY SESSION, not to any client connection: it
+  hits a long-lived connection that was fine hours earlier, and a fresh one; a restart
+  neither causes nor cures it. Samples: 09-22 clean (no restart), 09-23 dead (main
+  restarted), 09-24 clean (six restarted), 09-25 dead (six restarted AND untouched main).
+  "First pass failed" (7/7 tonight → 7/7 dead) is the symptom of a farm that is already
+  dead when you look, not a per-connection predictor. **Deploy policy is irrelevant to
+  this; the one lever is the Gateway auto-restart time** — moving it from 11:45 AM local
+  to just before the open would hand every morning a fresh farm (owner action, flagged
+  again in the report).
+- **The on-disk fallback carried the session on all 7.** Every daily ran on 09-23 bars —
+  at 09:55 ET the last complete daily bar is yesterday's anyway, so ma20/ATR were one
+  session short, and no variant wrote "broken tape". sniper bought **SPY 1 @ 769.69 + NVDA
+  2 @ 225.83** ("four weeks of no_change with 62% in cash; the neutral tier permits
+  half-size trend entries and I had not been using it"), swing **SPY 1 @ 769.72** ("trend
+  at $0 for 11 sessions while QQQ/XLK/SMH ran +5–10%: the caution tier kept us out of the
+  V-rebound"; NVDA vetoed by its own fee gate at 1 share). Both wrote the weight they
+  meant (lesson 19, fourth and fifth variant). main, bold, turtle, twin `no_change` on the
+  same 10y-at-2007-highs read; scalper stood down on the pause in one line each run.
+- **Fix (watchdog, effective at its next run; supervisor part at restart): overnight
+  alert flood.** Between 04:30 and 08:20 UTC the watchdog journaled 12 `shadows_down` /
+  `shadows_recovered` pairs (scalper ×8, sniper ×4) and 3 main `down`/`recovered` pairs
+  — 30 Telegram messages, every "outage" exactly one 5-min run long, "last beat 10–12 min
+  ago (limit 10 min)". Cause: every variant's off-hours tick took ~5.5 min in that window.
+  Evidence: news-poll stamps (the poll runs every off-hours tick) were 10–11 min apart on
+  all 7 from 04:15 to 08:59 UTC (main gaps 11, 21, 11, 22, 10, 11, 22) against 5 the night
+  before and 5–6 the rest of today; zero journal lines from any store in the window, so
+  whatever was slow fails silently (news fetch swallows errors; IB per-call timeouts
+  journal only quotes/bars). With a 5-min loop, one tick over 5 min puts the beat past the
+  10-min limit; which variants tripped was phase luck. Two changes: (a) the watchdog opens
+  an episode only on the SECOND consecutive stale sighting — the first is journaled as
+  `stale_once` / `shadows_stale_once` and cleared by a fresh beat (a real outage now
+  alerts at ~15 min instead of 10; the 09-22 dead shadows would have been caught 5 min
+  later); (b) the supervisor's tick guard now accumulates seconds per stage family and
+  journals `tick_slow` (elapsed, interval, top stages) when a tick outruns its interval.
+  Next slow night names the stage; I did not guess at one tonight.
+- **scalper: the breakeven stop it set on inflated R fired.** LLY's stop at 1174.50 (moved
+  09-24 12:36 ET on "+1.3R" that was +0.84R on the entry stop) filled **1171.58 at 10:10
+  ET, −3.76** — 8th straight loser (MRK 6th, SMH 7th, LLY 8th; last night's "6th" counted
+  MRK only), `entries paused until 2026-09-29`, and `intraday_skipped` fired correctly
+  (core only on the book). LLY then traded down to 1160.84 (1163 at 16:53 UTC): the
+  breakeven exit was RIGHT in outcome this time. Lesson 14 addendum: breakeven means "flat
+  and out" whichever way the tape goes — choose it for that, never for the R arithmetic.
+- **Events, all correct, one pass each.** ORCL 0.7 "Oracle Japan shares surge 7% after
+  record fiscal first quarter, bucking selloff of U.S. parent" fired bold, scalper, sniper,
+  turtle 13:47–13:50 UTC (ORCL −3.3 to −5.9%): a listed subsidiary's print, lesson 15.
+  COST 0.8 "Costco earnings beat expectations, thanks to tariff refunds" fired ALL 7
+  (main 13:47, sniper 14:37, the other five 16:50–16:51 — after the reconnect, with the
+  move flipped from −2.2% to +2.4%): no COST row in the shadows' market.json, so five
+  variants wrote "cannot attest"; three (swing, turtle, twin) suggested the event run fetch
+  the trigger symbol's bars. Written down, not built: it is a bundle change worth a night
+  of its own, and every COST/ORCL/ADBE event so far would still have been no_change on the
+  regime table. sniper ran two META 0.65 items: a Soft product-strategy piece, and "CEO who
+  posted 'Lake America' sweatshirt photos is no longer with the company" — a credit-union
+  CEO, tagged META because the summary says the post was on Facebook. Lesson 15 addendum;
+  no tagger change on one instance.
+- Session otherwise: all 7 dropped at the 16:45 UTC Gateway restart and were back by 16:47
+  (main's tick died in `fills_since` as every day). Standings (`ibagent compare`, all-time):
+  twin −0.46, turtle −14.85, swing −53.90, bold −66.20, sniper −91.37, scalper −128.88,
+  main −134.28 (main day +21.69, SPY 1 @ 770.64 now 771.47, stop trailed to 755.51).
+  `watchdog_state.json` `{}` at 22:41 UTC; all 8 tasks Running, heartbeats fresh.
+- Written down, not changed: the news poll's silent failures (`tick_slow` first); event-run
+  bars for the trigger symbol (above); `trail_stop SPY qty=0.0` wording (third night); the
+  bundle's `close` being yesterday's bar during the morning daily; no scorer change for a
+  subsidiary print (four variants, one story, lesson 15 handled it).
+
 ## 2026-09-24 (Thursday night, engineer) — the history farm was ALIVE after last night's six-shadow restart (the "evening connection never gets a farm" hypothesis is refuted on its first test); scalper's 6th loser, a JNJ proposal into the cooldown, and LLY moved to breakeven on R against a stop it had tightened itself; sniper ran the same CNBC headline twice because CNBC fixed a double slash in the URL
 
 - **The farm was fine this morning on all 7, after six shadows were restarted 22:43–22:48
