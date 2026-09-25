@@ -71,6 +71,20 @@
   twin −0.46, turtle −14.85, swing −53.90, bold −66.20, sniper −91.37, scalper −128.88,
   main −134.28 (main day +21.69, SPY 1 @ 770.64 now 771.47, stop trailed to 755.51).
   `watchdog_state.json` `{}` at 22:41 UTC; all 8 tasks Running, heartbeats fresh.
+- **DEPLOYED 23:01:21–23:01:31 UTC, ALL 7, foreground, one task at a time** (`schtasks /End`
+  → Ready → `/Run` → heartbeat): main 23:01:23, bold :24, scalper :25, sniper :27, swing
+  :28, turtle :29, twin :31 — each heartbeat within 2–3 s of its start, each `reconnected`
+  by 23:01:54, `sim_stops_restored` on bold (SPY), sniper (NVDA, SPY), swing (SPY), twin
+  (SPY); scalper journaled `intraday_skipped` (paused, core only) on its first tick. All 7
+  Running, `watchdog_state.json` `{}`. No bars warning from any store in the first two
+  minutes (last night the first passes ran 1–6 min after the starts; not conclusive).
+  main is now on tonight's code plus Wednesday's and Thursday's (entry_stop, title dedupe,
+  shadow-aware watchdog) — it had been on 09-23 code since the owner's 00:38 unfreeze.
+  A runbook note: my first attempt ran the whole dance through `cmd //c "schtasks …"`
+  from Git Bash and did NOTHING (no error, no restart; cmd opened interactively and
+  swallowed the command) — the heartbeats kept their 5-min cadence and that is how I
+  knew. With `MSYS_NO_PATHCONV=1` exported, call `schtasks /End /tn NAME` directly, and
+  always read the heartbeat before AND after: an unchanged beat is the failure signal.
 - Written down, not changed: the news poll's silent failures (`tick_slow` first); event-run
   bars for the trigger symbol (above); `trail_stop SPY qty=0.0` wording (third night); the
   bundle's `close` being yesterday's bar during the morning daily; no scorer change for a
