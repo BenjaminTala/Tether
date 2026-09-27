@@ -1,5 +1,36 @@
 # Live-session learnings
 
+## 2026-09-27 (Sunday night, engineer) — quiet weekend, no code change; the Gateway has not been started since the owner powered the PC off Friday night, and at 22:40 UTC Sunday nothing is listening on 4002
+
+- **ONGOING at 22:40 UTC Sunday: no Gateway process, all 7 `still_down`.** Timeline from the
+  System event log, file times and the journals: the owner powered the PC off from the Start
+  menu at 23:46 local Friday (04:46 UTC Saturday; event 1074, "power off") — 45 min after
+  Friday's deploy, so no journal has a line between 23:07 UTC Friday and the next boot. All
+  7 supervisors started at 21:07 UTC Saturday (16:07 local; `sim_stops_restored` on bold,
+  sniper, swing, twin, then one `connect` error each at 21:08), the PC restarted cleanly at
+  17:45–17:46 local (22:46 UTC; events 6006/6005) and all 7 started again at 22:46–22:47
+  with the same error. Since then: 23 hourly `still_down` lines per variant, latest 22:09
+  UTC Sunday `down_minutes 1402, failed_attempts 265`, text "connection refused - no
+  Gateway process is listening". `netstat` shows nothing on 4002 and the Gateway's
+  `launcher.log` was last written 11:45 local Friday: it has not been launched since the
+  power-off (no IBAgent-Gateway/IBC task is installed, so a boot does not bring it back).
+  Hysteresis behaved as designed (one error, then hourly; only main sends Telegram, the
+  shadows are stdout-only). **If the Gateway is not started and logged in before Monday
+  09:30 ET the fleet is blind at the open** — main's SPY GTC stop (755.51) stands at the
+  broker either way (lesson 6); the shadows' sim stops do not run without quotes.
+- **No engineer pass ran Saturday**: the 17:40 local slot fell inside the 17:45 restart. No
+  journal `engineer` line after Friday's 23:07 UTC.
+- **Nothing to learn from the tape**: no session since Friday's close, zero decisions, fills,
+  rejections or events on any variant. No `tick_slow`, `stale_once` or `shadows_stale_once`
+  line either — but the engine only ran connected for 45 min after Friday's deploy, so the
+  new instrumentation has had no overnight to observe yet. `watchdog_state.json` `{}`, all 7
+  tasks Running with fresh heartbeats (the supervisors are alive, only the broker is not).
+  Standings unchanged from Friday (`ibagent compare`): twin −0.46, turtle −14.85, swing
+  −53.90, bold −66.20, sniper −91.37, scalper −128.88 (paused to 09-29), main −134.28.
+- Not changed: no code, no knobs, no restart (docs-only commit). The written-down list from
+  Friday stands as is (news-poll silent failures pending a `tick_slow`; event-run bars for
+  the trigger symbol; `trail_stop qty=0.0` wording; `close` label in the morning daily).
+
 ## 2026-09-25 (Friday night, engineer) — the history farm was dead on ALL 7 this morning, including main, which nobody restarted; overnight every tick took ~5.5 min and the watchdog flapped 15 times on five-minute "outages"; sniper and swing bought SPY at half size; scalper's breakeven LLY stop tagged (8th loser, paused to 09-29)
 
 - **Dead farm, fleet-wide, with main untouched.** All six shadows' FIRST pass after the
