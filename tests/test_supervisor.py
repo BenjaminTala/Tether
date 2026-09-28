@@ -1002,6 +1002,23 @@ def test_slow_tick_is_journaled_with_where_the_time_went(env):
     assert len(_journal_kinds(tmp, "tick_slow")) == 1
 
 
+def test_slow_tick_does_not_announce_a_shutdown_and_run_does(env, monkeypatch):
+    """2026-09-28: d7e97c5 left run()'s last line inside _note_slow_tick, so every slow tick
+    sent "supervisor stopped / clean shutdown" (main: 87 slow ticks during the 13:36-16:44
+    UTC login outage, one Telegram per 30-min dedupe window) and a real stop sent nothing."""
+    m, broker, sup, clock, tmp = env
+    sent = []
+    sup.alerter.info = lambda t, b="", **kw: sent.append(t)
+    sup._note_slow_tick(73.0, 60)
+    assert sent == [] and len(_journal_kinds(tmp, "tick_slow")) == 1
+    monkeypatch.setattr("ibagent.supervisor.signal.signal", lambda *a: None)
+    sup.guard.start = lambda: None
+    sup.tick = lambda now: setattr(sup, "_stop", True)
+    sup.sleep = lambda s: None
+    sup.run()
+    assert sent == ["supervisor started", "supervisor stopped"]
+
+
 def test_tick_guard_respects_progress_model_allowance_and_disarm(env):
     m, broker, sup, clock, tmp = env
     exits = []

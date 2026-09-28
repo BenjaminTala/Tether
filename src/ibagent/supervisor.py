@@ -295,6 +295,7 @@ class Supervisor:
             self.guard.disarm()
             self._note_slow_tick(time.monotonic() - t0, interval)
             self.sleep(interval)
+        self.alerter.info("supervisor stopped", "clean shutdown")
 
     def _note_slow_tick(self, took_s: float, interval: float) -> None:
         """A tick longer than its loop interval doubles the heartbeat gap. 2026-09-25: every
@@ -308,7 +309,6 @@ class Supervisor:
                                               "stages": self.guard.stage_seconds()})
         except Exception:
             pass                                          # a diagnostic must never take the loop down
-        self.alerter.info("supervisor stopped", "clean shutdown")
 
     def run_agent_once(self, run_type: str) -> None:
         """CLI entry: one agent cycle now (fresh news pull first), outside the scheduler."""
