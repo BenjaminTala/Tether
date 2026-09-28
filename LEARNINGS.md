@@ -1,5 +1,20 @@
 # Live-session learnings
 
+## 2026-09-28 (owner session) — Gateway launched at 05:52 UTC but never completed login; the 11:45 AM auto-restart healed it at 16:45 UTC
+
+- Gateway down Sat 21:08 UTC → owner launched it 05:52 UTC Mon; the port answered but every
+  API handshake timed out (all 7 agents + an ad-hoc client-26 smoke at 06:16 and 13:30) —
+  login stuck (likely 2FA/dialog). Nobody was at the PC; the session lost 09:30-12:45 ET.
+- The Gateway's own daily auto-restart fired at **11:45 AM local** (process StartTime
+  11:45:04) and came back logged in; main reconnected 16:45:27, shadows by 16:46:05.
+  So the owner's 09-14 change to 11:45 PM did NOT persist (or was reverted) — asked the
+  owner to set it again. Silver lining: an auto-restart re-uses the saved session and does
+  NOT need a login, which is also why a stuck manual login can be healed by one.
+- "all up" from the owner meant "I launched it", not "it's logged in". Owner-session check
+  should always verify with a spare-client smoke (`--set broker.client_id=26`), not the
+  port test — port-open + handshake-timeout is the logged-out signature.
+- Shipped e1df661: FROZEN leads the report, pulse title and fleet scoreboard.
+
 ## 2026-09-27 (Sunday night, engineer) — quiet weekend, no code change; the Gateway has not been started since the owner powered the PC off Friday night, and at 22:40 UTC Sunday nothing is listening on 4002
 
 - **ONGOING at 22:40 UTC Sunday: no Gateway process, all 7 `still_down`.** Timeline from the
