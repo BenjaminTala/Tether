@@ -76,6 +76,22 @@ def test_frozen_watch_out_names_the_mismatch_and_the_remedy(env):
     assert "SPY book=2.0 broker=0.0" in line and "ibagent unfreeze" in line
 
 
+def test_frozen_leads_the_report_and_the_pulse(env):
+    """2026-09-18..22: main sat frozen 4.5 days because the freeze was one 'Watch out' line
+    under an ordinary-looking P&L; it must open both the daily report and the pulse."""
+    m, broker, sup, clock, tmp = env
+    enter(sup, broker, "SPY", "trend", 2.0, 100.0, with_broker=False)
+    sup.tick(clock())
+    assert sup.book.frozen
+    title, body = sup._status_text(clock())
+    assert "FROZEN" in title and body.startswith("🧊 FROZEN")
+    sent = []
+    sup.alerter.info = lambda t, b, **kw: sent.append((t, b))
+    sup._report_job(clock())
+    t, b = sent[-1]
+    assert t.startswith("🧊") and b.startswith("🧊 FROZEN") and "SPY book=2.0" in b.split("\n")[0]
+
+
 def test_stop_fill_racing_reconcile_does_not_freeze(env):
     """2026-08-28 bold: NVDA's GTC stop filled between the tick's fill sync and positions();
     reconcile saw 'NVDA book=3 broker=0 (missing)' and froze the engine for its own exit."""

@@ -964,7 +964,10 @@ class Supervisor:
         total_pct = total_pnl / self.book.net_contributions if self.book.net_contributions > 0 else 0.0
         fees_today, _ = self._fees_and_realized_today(now)
         mood = "📈" if day_pnl >= 0 else "📉"
-        lines = [
+        frozen = self._frozen_banner()
+        if frozen:
+            mood = "🧊"
+        lines = ([frozen, ""] if frozen else []) + [
             f"P&L today:     {day_pnl:+,.2f} $  ({day_pct:+.2%})",
             f"  before fees: {day_pnl + fees_today:+,.2f} $",
             f"P&L all-time:  {total_pnl:+,.2f} $  ({total_pct:+.2%})",
@@ -980,6 +983,7 @@ class Supervisor:
                 stop = f"{p.stop_price:,.2f}" if p.stop_price else "—"
                 lines.append(f"{p.symbol:<6}{mark:>9,.2f}{pnl:>+9.2f}{pct:>+8.1%}   {stop}")
         title = (f"{mood} {now.astimezone(self.tz):%H:%M} — "
+                 f"{'FROZEN, ' if frozen else ''}"
                  f"{'up' if day_pnl >= 0 else 'down'} {abs(day_pnl):,.2f} $ today")
         return title, "\n".join(lines)
 
@@ -1118,9 +1122,13 @@ class Supervisor:
         missed = self._missed_session_banner(now)
         if missed:
             mood = "⚠️"
+        frozen = self._frozen_banner()
+        if frozen:
+            mood = "🧊"
 
         # ---- plain-language summary first -------------------------------------------------
-        lines = ([missed, ""] if missed else []) + [
+        banners = [b for b in (frozen, missed) if b]
+        lines = (banners + [""] if banners else []) + [
             f"P&L today:     {day_pnl:+,.2f} $ ({day_pct:+.2%})",
             f"  before fees: {day_pnl + fees_today:+,.2f} $   (fees paid today: {fees_today:,.2f} $)",
             f"P&L all-time:  {since_start:+,.2f} $ ({since_pct:+.2%}) on "
@@ -1192,6 +1200,19 @@ class Supervisor:
         if self.variant_name == "main":
             self._maybe_fleet_digest(now)
 
+    def _frozen_banner(self) -> Optional[str]:
+        """Lead every owner-facing message with a freeze while it lasts.
+
+        2026-09-18..22: main sat frozen 4.5 days. The freeze was correct, but the only mention
+        was one "Watch out" line under the per-stock table of a report whose headline P&L
+        looked ordinary, and two owner visits read past it. A freeze never clears itself, so
+        it goes first, in the title and the opening line, until someone runs unfreeze."""
+        if not self.book.frozen:
+            return None
+        return ("🧊 FROZEN — NOT TRADING until you clear it: "
+                f"{self.book.frozen_reason or 'the book and IBKR disagree'}. "
+                "Remedy is in 'Watch out' below.")
+
     def _missed_session_banner(self, now: datetime) -> Optional[str]:
         """Lead the report with the outage when nobody watched today's session.
 
@@ -1227,7 +1248,8 @@ class Supervisor:
                 snap = b.equity(prices, self.now_fn())
                 out.append(f"• {name}: ${snap.equity:,.2f} "
                            f"({snap.equity - b.net_contributions:+,.2f} all-time, "
-                           f"{len(b.positions)} pos)")
+                           f"{len(b.positions)} pos)"
+                           + (" 🧊 FROZEN" if b.frozen else ""))
             except Exception:
                 out.append(f"• {name}: (cannot mark right now)")
         return out
