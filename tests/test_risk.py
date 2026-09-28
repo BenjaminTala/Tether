@@ -145,6 +145,25 @@ def test_held_position_relisted_at_current_weight_is_a_hold_not_a_rejected_add(m
     assert [o.req.symbol for o in plan.orders] + [r.symbol for r in plan.rejections] == ["QQQ"]
 
 
+def test_held_relist_under_one_whole_share_is_a_hold_not_a_rejected_add(mandate, tmp_path):
+    """2026-09-28: bold and swing re-listed 1 held SPY (~$768) at 0.08 — a ~$26 delta, over
+    min_order_usd but under one share — and got "needs fractional shares" / "no averaging
+    down" REJECTED lines. In whole-share mode that delta can never become an order: hold.
+    A new entry that cannot afford one share is still rejected."""
+    m = mandate.model_copy(
+        update={"broker": mandate.broker.model_copy(update={"fractional_shares": False})})
+    for price in (768, 755):                                  # above / below avg cost 760
+        b = make_book(tmp_path / str(price), 10000)
+        enter(b, "QQQ", "trend", 1, 760, stop=740)
+        plan = plan_orders(m, b, {"QQQ": make_quote("QQQ", price)}, {},
+                           rebalance(intent("QQQ", "trend", 0.08, stop=740)), NOW)
+        assert plan.orders == [] and plan.rejections == []
+    b = make_book(tmp_path / "new", 10000)
+    plan = plan_orders(m, b, {"QQQ": make_quote("QQQ", 768)}, {},
+                       rebalance(intent("QQQ", "trend", 0.002, stop=740)), NOW)
+    assert plan.orders == [] and [r.symbol for r in plan.rejections] == ["QQQ"]
+
+
 def test_cooldown_blocks_reentry(mandate, tmp_path):
     b = make_book(tmp_path)
     b.record_stop_out("QQQ", TODAY, 5)

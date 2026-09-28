@@ -251,6 +251,12 @@ def plan_orders(mandate: Mandate, book: Book, quotes: Dict[str, Quote], atrs: Di
                 # "LLY: no averaging down" — a $16 and a $21 delta — echoed as REJECTED
                 # lines the next runs were told not to re-propose.
                 continue
+            if held and not mandate.broker.fractional_shares and diff < price:
+                # Same hold, whole-share mode: a delta under one share can never size to an
+                # order (qty <= diff/price < 1). 2026-09-28: bold and swing re-listed 1 SPY
+                # (~$768) at 0.08 — a ~$26 delta — and got "needs fractional shares" and
+                # "no averaging down" REJECTED lines for a position they meant to keep.
+                continue
             entries.append((p, diff))
 
     # ---- entry gates ---------------------------------------------------------------------
