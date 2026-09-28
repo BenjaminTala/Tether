@@ -1,5 +1,33 @@
 # Live-session learnings
 
+## 2026-09-28 (Monday night, engineer) — false "supervisor stopped" Telegrams on every slow tick; sub-share held re-lists rejected on bold/swing; no restart
+
+- **Bug (fixed, needs a restart to take effect): d7e97c5 moved run()'s final
+  `alerter.info("supervisor stopped", "clean shutdown")` into `_note_slow_tick`.** Every
+  tick longer than its interval sent that alert (main is the only Telegram sender; 30-min
+  dedupe), and a real clean stop sent nothing. Main had 87 `tick_slow` lines today — all
+  `{"connect": 72}` during the 13:36–16:44 UTC logged-out Gateway (RTH loop is 60 s, the
+  handshake timeout 72 s), plus the 16:51 tick (361 s: model 173, quote 132, bars 50). So
+  ~7 false "stopped" messages today, and one per day on any day a model run makes a slow
+  tick. The first real `tick_slow` data also says: during a login outage every RTH tick is
+  slow by construction — `connect` dominance is the outage, not a new problem.
+- **Bug (fixed): held re-lists under one whole share were rejected.** bold and swing listed
+  held SPY (1 sh ~$768, ~7.7%) at 0.08 in the weekly: a ~$26 delta, over `min_order_usd`
+  (25) so the 09-22 dust rule missed it; it floored to 0 shares → bold "needs fractional
+  shares", swing "no averaging down". In whole-share mode a held add with delta < price is
+  now a hold. Orders placed are unchanged (such a delta could never size to ≥1 share); only
+  the REJECTED lines go. Fleet lesson 19 addendum.
+- Day: session lost until 16:45 UTC (see owner entry). main/bold/turtle/twin bought XLV,
+  swing JNJ, all half size, all filled first try; scalper paused through 09-29; sniper three
+  correct META/NVDA no_change event runs. Standings: twin −37.55, turtle −50.06, swing
+  −79.49, bold −84.53, sniper −109.28, scalper −132.20, main −165.02.
+- **Not restarted**: PowerShell was unavailable to this headless run, and the last two
+  deploys show a restart that is not verified in the foreground can leave the fleet dead.
+  Neither fix is urgent; both load at the next restart.
+- **Working tree note**: `skills/failure-modes/SKILL.md` has an uncommitted edit (not the
+  engineer's) that prefixes the frontmatter's first `---` with `benjamin2qk` — broken
+  YAML frontmatter on the final-gate skill copied into every run. Left for the owner.
+
 ## 2026-09-28 (owner session) — Gateway launched at 05:52 UTC but never completed login; the 11:45 AM auto-restart healed it at 16:45 UTC
 
 - Gateway down Sat 21:08 UTC → owner launched it 05:52 UTC Mon; the port answered but every

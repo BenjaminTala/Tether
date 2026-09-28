@@ -172,3 +172,8 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    run: the bundle's `close` is the last DAILY bar, i.e. yesterday's close during the
    morning daily; check the extension gate against the live quote, which that day moved
    SPY from 1.40 to 0.86 ATR over ma20.)
+   (2026-09-28: to KEEP a held position in a rebalance, list it at about its current weight
+   — omitting it sells it. bold and swing re-listed 1 SPY (~7.7%) at 0.08 and each got a
+   REJECTED line for the ~$26 of "add" that is less than one share. The engine now treats a
+   held re-list whose extra is under one whole share as a hold; that line was noise, not a
+   verdict on SPY. A real add still needs a full share of room and price above avg cost.)
