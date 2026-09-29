@@ -22,6 +22,9 @@ def test_build_command_flags(md):
     allowed = cmd[cmd.index("--allowedTools") + 1]
     assert "WebFetch(domain:sec.gov)" in allowed and ",WebFetch," not in f",{allowed},"
     assert "--json-schema" in cmd and "--append-system-prompt-file" in cmd
+    # 2026-09-29: without it the claude.ai connectors (Gmail/Drive/Calendar needs-auth, Claude Docs
+    # connected) loaded into every run and 44 September decision notes repeated their auth notice
+    assert "--strict-mcp-config" in cmd and "--mcp-config" not in cmd
 
 
 def test_sandbox_settings_deny_write_tools(md):

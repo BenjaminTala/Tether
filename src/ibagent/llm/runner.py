@@ -3,7 +3,8 @@
 Safety properties enforced here (independent of the prompt):
   * cwd = a per-run bundle directory OUTSIDE the repo, containing only what the model may read
   * `--tools` restricts which tools exist (read-only set), `--allowedTools` pre-approves them,
-    `--permission-mode dontAsk` refuses everything else; a `.claude/settings.json` in the bundle
+    `--permission-mode dontAsk` refuses everything else, `--strict-mcp-config` loads no MCP servers
+    (not even the account's claude.ai connectors); a `.claude/settings.json` in the bundle
     mirrors this and scopes WebFetch to an allowlist of domains
   * child environment is minimal; ANTHROPIC_* is always dropped (never bill an API key)
   * `--max-turns` + a hard timeout bound usage; the result is either a JSON object or a failure —
@@ -93,6 +94,8 @@ def build_command(claude_bin: str, cfg: LLMCfg, run_type: RunType, schema_text: 
     allowed = _allowed_rules(tools, cfg.sandbox.webfetch_domains)
     cmd = [claude_bin, "-p", "--output-format", "json",
            "--tools", ",".join(tools), "--allowedTools", ",".join(allowed),
+           # no MCP servers at all: without this the owner's claude.ai connectors load into every run
+           "--strict-mcp-config",
            "--permission-mode", cfg.permission_mode, "--max-turns", str(cfg.max_turns[run_type])]
     if schema_text:
         cmd += ["--json-schema", schema_text]
