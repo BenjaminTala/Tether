@@ -1,5 +1,32 @@
 # Live-session learnings
 
+## 2026-09-29 (Tuesday night, engineer) — quiet day, all no_change; event runs were blind to the symbol they were for; model runs were loading the claude.ai connectors; no restart
+
+- **Day**: 21 model runs fleet-wide, every one `no_change`, zero orders, zero rejections.
+  Dailies held what they bought 09-28 (XLV, JNJ, SPY) and passed on NVDA's day-old $150B
+  buyback (lesson 7, all 7 correct). scalper's pause ran out today (resumes 09-30). Only
+  engine action: sniper's NVDA trail to 217.65. Standings: twin −47.95, turtle −60.33,
+  bold −90.02, swing −95.00, sniper −118.96, scalper −133.12, main −174.14.
+- **Gateway auto-restart fired at 11:45 AM local again** (16:45 UTC `Socket disconnect` on
+  all 7, reconnected within ~60 s; one main `error` from `fills_since`). The owner's
+  11:45 PM setting is still not in effect — second day in a row after 09-28's note.
+- **Fix: event runs fetch the trigger symbol.** The gate watches any whitelisted symbol in
+  material news, but the run's market.json covered held|core|model-watchlist only. AMD
+  ("World Labs acquisition", 0.8) fired all 7; six wrote "no AMD row — can't check the
+  chase gate/stop/sizing"; scalper (whole-whitelist) had it and found 3.2 ATR over ma20.
+  Right answers anyway (neutral → no spec), but the run was blind to its own subject.
+- **Fix: `--strict-mcp-config` on every model run.** stream-json init showed the runs
+  loading the account's claude.ai connectors (Claude Docs connected, Gmail/Drive/Calendar
+  needs-auth). dontAsk refused them, but the auth notice leaked into 44 September decision
+  notes ("Gmail … need authorizing"). Also seen: user-level hooks run inside model runs
+  (`hook_started` in init) — not changed, noted for the owner.
+- sniper: two differently-titled stories on one event ("Meta hires MongoDB CEO…", then
+  "MongoDB's stock is down nearly 20% as CEO decamps to Meta") fired two META runs 48 min
+  apart; title dedupe can't catch a rewrite. Both correct no_change. Lesson 15 addendum.
+- **Not restarted** (PowerShell unavailable to this run; an unverified restart has killed the
+  fleet before). Both fixes load at the next supervisor restart. The failure-modes SKILL.md
+  frontmatter flagged last night is clean now.
+
 ## 2026-09-28 (Monday night, engineer) — false "supervisor stopped" Telegrams on every slow tick; sub-share held re-lists rejected on bold/swing; no restart
 
 - **Bug (fixed, needs a restart to take effect): d7e97c5 moved run()'s final

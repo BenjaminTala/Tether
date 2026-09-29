@@ -125,7 +125,10 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    a listed subsidiary's print is a different company's catalyst. Same day sniper got "CEO
    who posted 'Lake America' sweatshirt photos is no longer with the company" tagged META
    because the post was on Facebook: a product name in the text is not the company. First
-   check, before any triage: is the company in the headline actually your symbol?)
+   check, before any triage: is the company in the headline actually your symbol?
+   2026-09-29: "Meta hires MongoDB CEO…" and, 48 min later, "MongoDB's stock is down nearly
+   20% as CEO decamps to Meta" fired sniper twice on META — one event, two rewrites, and the
+   big move was MDB's. A rewrite of a story you already triaged today is lesson 13: one line.)
 16. **Materiality is a headline score, not an economic one — a dollar figure is only Hard
    relative to the company's size.** "Novartis India acquires Pfizer brands for $132m"
    scored 0.8 (M&A pattern) on 2026-09-08 and fired six variants; every one fetched the
