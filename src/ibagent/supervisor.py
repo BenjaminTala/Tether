@@ -812,7 +812,11 @@ class Supervisor:
                     f"day move: {trigger.move_pct:+.1%}\nheadline: {trigger.headline}\n{trigger.link}\n")
             self.journal.record("event_trigger", {"symbol": trigger.symbol, "score": trigger.score,
                                                   "move": trigger.move_pct, "headline": trigger.headline})
-            result = self._agent_job("event", now, event_note=note)
+            # The trigger symbol rides along even when it is neither held nor watched: on
+            # 2026-09-29 six of seven AMD event runs answered "market.json has no AMD row -
+            # can't check the chase gate, the stop or the sizing" about the one symbol the
+            # run was for.
+            result = self._agent_job("event", now, event_note=note, extra_symbols={trigger.symbol})
             if self._usage_limited(result):
                 # The model never saw the headline: give back the budget slot and the
                 # fired-key so the SAME story can fire once the limit clears (2026-09-03:
@@ -879,7 +883,8 @@ class Supervisor:
         self.journal.record("llm_backoff", {
             "run_type": run_type, "retry_after_ts": self.state.llm_retry_after_ts})
 
-    def _agent_job(self, run_type: str, now: datetime, event_note: str = ""):
+    def _agent_job(self, run_type: str, now: datetime, event_note: str = "",
+                   extra_symbols: Set[str] = frozenset()):
         if not (self.skills_dir / "position-sizing" / "SKILL.md").is_file():
             # Skills are part of the decision contract: no skills in the bundle, no model run.
             self.journal.record("error", {"where": "agent_job",
@@ -888,7 +893,7 @@ class Supervisor:
                                   f"{run_type} run refused — {self.skills_dir} lacks the skill files. "
                                   "Restore skills/ in the repo.")
             return None
-        symbols = self._symbols_for_run(run_type)
+        symbols = self._symbols_for_run(run_type) | set(extra_symbols)
         quotes = self._quotes(symbols)
         bars = self._bars(sorted(symbols), now)
         today_local = now.astimezone(self.tz).date()

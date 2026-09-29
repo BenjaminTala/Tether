@@ -954,6 +954,31 @@ def test_usage_limited_event_gives_the_gate_slot_back(env, monkeypatch):
     assert len(sup.runner.requests) == 1                             # no second model run
 
 
+def test_event_run_fetches_the_trigger_symbol_even_when_unwatched(env, monkeypatch):
+    """2026-09-29: AMD (spec whitelist, in material news, so gate-watchable) fired 7 event
+    runs; it was neither held nor on the model's watchlist, so the run fetched bars for
+    held|core|watchlist only and six of seven wrote "market.json has no AMD row - can't
+    check the chase gate". The trigger symbol now rides along into the run's data."""
+    import ibagent.supervisor as sv
+    from ibagent.news.scoring import EventTrigger
+    m, broker, sup, clock, tmp = env
+    sup.skills_dir = _install_skills(tmp)
+    core = set(m.universe.active.core_holdings)
+    sym = next(i.symbol for i in m.universe.active.instruments if i.symbol not in core)
+    sup.state.watchlist = []
+    assert sym not in sup._symbols_for_run("event")
+    sup.runner = FakeRunner([RunResult(ok=False, decision=None, error="x")])
+    monkeypatch.setattr(sv, "check_event_gate", lambda *a, **k: EventTrigger(
+        symbol=sym, score=0.8, move_pct=0.025, headline="h", link="L1"))
+    fetched = []
+    real_bars = sup._bars
+    monkeypatch.setattr(sup, "_bars", lambda symbols, now: fetched.append(set(symbols)) or real_bars(symbols, now))
+
+    clock.now = datetime(2026, 8, 12, 18, 30, tzinfo=timezone.utc)   # 14:30 ET, in window
+    sup._news_job(clock.now, {})
+    assert fetched and sym in fetched[-1]
+
+
 def _wedged_broker_call(seconds):
     time.sleep(seconds)                                  # stands in for a call nothing wraps
 
