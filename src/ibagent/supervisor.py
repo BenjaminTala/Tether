@@ -908,7 +908,18 @@ class Supervisor:
             focus = set(self.book.positions) | set(self.state.watchlist) \
                 | {s.symbol for s in movers} | set(momentum_rank(stats)[:8])
             stats.update(self._refresh_bars(focus, today_local))
-        atrs = {s: v.atr for s, v in stats.items() if v.atr}
+            if not any(s.day_change is not None for s in stats.values()):
+                # 2026-09-30: with the history farm dead until the 11:45 AM Gateway restart,
+                # scalper's scans got day_* = null on every row and six of them spent their
+                # notes re-diagnosing the feed ("please check the intraday data feed") - 78
+                # such runs in September. Say it once, as the engine, so the model need not.
+                event_note += (
+                    "\n\n**Engine note - no intraday tape this run.** The broker's history "
+                    "service returned no bar for today on any symbol, so every `day_*` field "
+                    "in market.json is null. This is a data outage, not a quiet tape, and it "
+                    "is already journaled. Manage held positions on their stops; take no new "
+                    "continuation entry; say so in one line (fleet lesson 10) and `no_change`.")
+        atrs ={s: v.atr for s, v in stats.items() if v.atr}
         held = set(self.book.positions)
         digest = build_digest(self._scored_recent, held, set(self.state.watchlist))
         # A model run legitimately takes timeout x attempts (sniper 2026-09-11): allow it.

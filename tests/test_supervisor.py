@@ -979,6 +979,49 @@ def test_event_run_fetches_the_trigger_symbol_even_when_unwatched(env, monkeypat
     assert fetched and sym in fetched[-1]
 
 
+def test_intraday_scan_says_so_when_no_row_has_todays_tape(md, tmp_path, monkeypatch):
+    """2026-09-30: the history farm was dead until 16:45 UTC and scalper's scans got day_* =
+    null on every row; six wrote paragraphs re-diagnosing the feed. The engine now names the
+    outage in the run's note - and only when no row has today's bar."""
+    import ibagent.supervisor as sv
+    from ibagent.broker.base import Bar
+    md["llm"]["sandbox"]["runs_root"] = str(tmp_path / "runs")
+    md["journal"]["dir"] = str(tmp_path / "journal")
+    md["kill_switch"]["file"] = str(tmp_path / "KILL")
+    md["cadence"]["intraday_minutes"] = 30
+    m = mandate_from_dict(md)
+    broker = SimBroker(SimConfig(initial_cash=1000.0))
+    broker.connect()
+    broker.set_time(NOW)
+    clock = Clock(datetime(2026, 8, 12, 15, 0, tzinfo=timezone.utc))
+    sup = Supervisor(m, broker, runner=FakeRunner([]), data_dir=tmp_path, alerter=Alerter([]),
+                     now_fn=clock, sleeper=lambda s: None, feeds=[],
+                     skills_dir=_install_skills(tmp_path))
+    notes = []
+
+    class _Stop(Exception):
+        pass
+
+    def capture(*a, event_note="", **k):
+        notes.append(event_note)
+        raise _Stop()
+    monkeypatch.setattr(sv, "run_cycle", capture)
+    yday = Bar(NOW - timedelta(days=1), 99.0, 100.0, 98.0, 99.5, 1e6)
+
+    def dead(contract, days):
+        raise RuntimeError("no historical bars")
+    broker.daily_bars = dead
+    with pytest.raises(_Stop):
+        sup._agent_job("event", clock.now, event_note="scan")
+    assert notes[-1].startswith("scan") and "no intraday tape" in notes[-1]
+
+    broker.daily_bars = lambda contract, days: [yday, Bar(NOW, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    sup._bars_warned.clear()
+    with pytest.raises(_Stop):
+        sup._agent_job("event", clock.now, event_note="scan")
+    assert notes[-1] == "scan"
+
+
 def _wedged_broker_call(seconds):
     time.sleep(seconds)                                  # stands in for a call nothing wraps
 
