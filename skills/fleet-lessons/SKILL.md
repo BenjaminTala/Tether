@@ -68,7 +68,11 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    protect the book; your job on a broken tape is to not trade blind.
    (2026-09-18: all 7 dailies got an EMPTY market.json after an engine redeploy and every
    one answered in a single pass — no entries, no blind stop moves, held stops left to the
-   broker. That is the whole correct response; the engine now keeps its bars across restarts.)
+   broker. That is the whole correct response; the engine now keeps its bars across restarts.
+   2026-09-30: the intraday version — `day_*` null on every row until the midday Gateway
+   restart — drew six multi-paragraph scalper notes asking the human to "check the feed";
+   September has 78 of them. When the run's note says "no intraday tape this run", the
+   outage is already known and journaled: manage held stops, no new entry, one line.)
 11. **Second-try fills work on liquid ETFs.** XLF expired unfilled once and filled on the
    next day's re-attempt at ask+35bps for two variants; LLY never did. Lesson 5 holds:
    express a thesis through the instrument that fills.

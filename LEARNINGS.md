@@ -1,5 +1,31 @@
 # Live-session learnings
 
+## 2026-09-30 (Wednesday night, engineer) — dead history farm again until the 11:45 AM Gateway restart; scalper's scans re-diagnosed the null intraday tape six times; engine now says it once; still no restart since 09-28
+
+- **Dead farm, 3rd morning running.** Main's 00:05 UTC pass failed (VTI, NVDA, SPY → rest
+  skipped) and every RTH pass served cached bars (`bars_stale_served`, last_bar 09-29; SPY/XLV
+  on a second path show 09-28) until the Gateway's **11:45 AM local** auto-restart (16:45 UTC
+  `Socket disconnect` on all 7, `bars_recovered` 16:48). Cost: 36 `tick_slow` lines on main,
+  each ~71 s = `bars: 60` (3 × 20 s timeouts, every ~5 min). The owner's 11:45 PM setting is
+  still not in effect. swing also dropped its connection at 12:18 UTC (pre-open, back 12:24).
+- **Day**: every daily `no_change` except scalper, whose first run after the cooldown bought
+  **XLV 5 @ 170.39** (trend, 0.088 half size, stop 164.60, engine-trailed to 166.93). NVDA's
+  09-28 buyback was passed as stale by all 7 (lesson 7), AMD's $8B deal as small (lesson 16),
+  Micron items as previews (lesson 9). sniper: NVDA buyback re-write (0.9) → stop tightened
+  to 218.5; GS "succession planning" (0.65) → no_change. One Claude usage limit (scalper 14:13
+  UTC, 204 s, backed off 22 min as designed). Standings (after close): twin −72.01, turtle
+  −77.23, swing −104.93, bold −107.34, sniper −124.04, scalper −145.32, main −194.91.
+- **Fix: intraday scans name a dead tape.** Until 17:12 UTC scalper's scans got `day_*` null
+  on every row; six wrote paragraphs about it ("please check the intraday data feed"), and
+  September has 78 such scalper runs. When no row has today's bar after the refresh, the run's
+  note now says so as the engine: outage, manage stops, no new continuation entry, one line.
+  Prompt text only; no data, risk or order path touched.
+- **Not restarted — and nothing since 09-28 05:55 UTC is live** (last `sim_stops_restored`).
+  Four fixes wait for the next restart: the false "supervisor stopped" alert, sub-share held
+  re-lists, `--strict-mcp-config` (today's notes still end "Gmail, Calendar and Drive …
+  need authorizing"), trigger-symbol bars, plus tonight's note. PowerShell is unavailable
+  to this headless run; an unverified restart has killed the fleet before.
+
 ## 2026-09-29 (Tuesday night, engineer) — quiet day, all no_change; event runs were blind to the symbol they were for; model runs were loading the claude.ai connectors; no restart
 
 - **Day**: 21 model runs fleet-wide, every one `no_change`, zero orders, zero rejections.
