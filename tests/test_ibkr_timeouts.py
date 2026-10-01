@@ -101,6 +101,47 @@ def test_daily_bars_uses_short_timeout_and_fails_closed_on_empty():
     assert b.ib.hist_kwargs["timeout"] == 7.0
 
 
+class LateReportIB(DeadIB):
+    """IB delivers the commission report as its own message after the execution; ib_async
+    writes it into the Fill in place when the event loop runs (ib.sleep)."""
+
+    def __init__(self, deliver_report: bool = True):
+        super().__init__()
+        from datetime import datetime, timezone
+        self.fill = SimpleNamespace(
+            contract=SimpleNamespace(symbol="XLV"), time=datetime(2026, 10, 1, 18, 6, 3, tzinfo=timezone.utc),
+            execution=SimpleNamespace(execId="e1", permId=7, orderId=3, orderRef="s-XLV-STP6", side="SLD",
+                                      shares=5.0, price=165.9),
+            commissionReport=SimpleNamespace(execId="", commission=0.0))
+        self.deliver_report = deliver_report
+        self.slept = 0.0
+
+    def reqExecutions(self):
+        return [self.fill]
+
+    def sleep(self, seconds):
+        self.slept += seconds
+        if self.deliver_report:
+            self.fill.commissionReport.execId, self.fill.commissionReport.commission = "e1", 1.0
+
+
+def test_fills_wait_for_the_late_commission_report():
+    """2026-10-01: main's XLV stop filled at the broker and was booked with commission 0.0
+    (also NVDA 09-14, SPY 09-23) - the fill was converted before IB's separate commission
+    report arrived. The fee must be the broker's, not a placeholder zero."""
+    from datetime import datetime, timezone
+    since = datetime(2026, 10, 1, 18, 5, tzinfo=timezone.utc)
+    b = IBKRBroker(BrokerCfg(port=4002, client_id=1, connect_timeout_s=20), ib=LateReportIB())
+    [f] = b.fills_since(since)
+    assert (f.symbol, f.side, f.commission) == ("XLV", "SELL", 1.0)
+    # A report that never comes costs a bounded wait, never a hang or a lost fill.
+    b = IBKRBroker(BrokerCfg(port=4002, client_id=1, connect_timeout_s=20),
+                   ib=LateReportIB(deliver_report=False), commission_wait_s=1.0)
+    [f] = b.fills_since(since)
+    assert f.commission == 0.0 and b.ib.slept == 1.0
+    assert b.fills_since(datetime(2026, 10, 2, tzinfo=timezone.utc)) == [] and b.ib.slept == 1.0
+
+
 def test_positions_refuse_to_answer_from_a_dropped_link():
     """2026-09-18: main's VTI quote timed out at 12:23:22 UTC, the adapter dropped the link,
     and the same tick's reconcile read ib_async's emptied position cache as 'SGOV, VTI

@@ -172,7 +172,7 @@ def duration_str(days: int) -> str:
 class IBKRBroker:
     def __init__(self, cfg: BrokerCfg, account_id: str = "", base_currency: str = "USD",
                  ib: Optional["IB"] = None, qty_precision: int = 4, ack_wait_s: float = 1.5,
-                 quote_timeout_s: float = 8.0):
+                 quote_timeout_s: float = 8.0, commission_wait_s: float = 3.0):
         if IB is None and ib is None:
             raise BrokerError("ib_async is not installed (pip install ib_async)")
         self.cfg = cfg
@@ -182,6 +182,7 @@ class IBKRBroker:
         self.qty_precision = qty_precision
         self.ack_wait_s = ack_wait_s
         self.quote_timeout_s = quote_timeout_s
+        self.commission_wait_s = commission_wait_s
         self._contracts: Dict[str, "IBContract"] = {}
         # Hard ceiling on every blocking request (connect included, so it must not undercut
         # connect_timeout_s). 2026-08-25: with the ib_async default of 0 (= wait forever) a
@@ -297,13 +298,20 @@ class IBKRBroker:
 
     def fills_since(self, ts: datetime) -> List[Fill]:
         ts = utc(ts)
-        seen: Dict[str, Fill] = {}
+        raw: Dict[str, "IBFill"] = {}
         for f in list(self.ib.fills()) + list(self._timed("fills_since", self.ib.reqExecutions)):
-            if f.execution.execId in seen:
-                continue
-            if utc(f.time) >= ts:
-                seen[f.execution.execId] = fill_from_ib(f)
-        return sorted(seen.values(), key=lambda x: x.ts)
+            if f.execution.execId not in raw and utc(f.time) >= ts:
+                raw[f.execution.execId] = f
+        # IB sends the commission report as a separate message after the execution, and
+        # ib_async fills it into the Fill in place. Converting at once booked main's broker
+        # stop-outs at $0 fee (NVDA 09-14, XLV 10-01) and SPY's 09-23 entry: 3 of 5 fills on
+        # a fixed plan with a $1 minimum. Yield briefly for a missing report; book what IB says.
+        waited = 0.0
+        while waited < self.commission_wait_s and any(not getattr(f.commissionReport, "execId", "")
+                                                       for f in raw.values()):
+            self.sleep(0.25)
+            waited += 0.25
+        return sorted((fill_from_ib(f) for f in raw.values()), key=lambda x: x.ts)
 
     # ---- market data ----
     def quote(self, contract: Contract) -> Quote:
