@@ -1,5 +1,34 @@
 # Live-session learnings
 
+## 2026-10-01 (Thursday night, engineer) — XLV stopped out fleet-wide and tripped four cooldowns; main's broker fills booked at $0 fee; scalper's overnight quotes took 6 min a tick; still no restart
+
+- **XLV, one bet five times.** main, bold, turtle, twin (09-28) and scalper (09-30) held
+  XLV at half size; all five stops filled 10-01 (scalper 15:51 UTC at 166.89, main 18:06 at
+  165.90 at IBKR, the sim stops 18:21 at 165.81): −19.54, −28.20, −30.59, −19.15, −35.04.
+  swing's JNJ (13:46) and SPY (15:23, `symbol_stop_guard` SPY 2 in 30) stops filled too.
+  Cooldowns to 10-05: main and bold (5 in a row), twin and swing (3), scalper (9). twin also
+  sold its 2 SPY in the daily on its own two-closes-below-ma20 rule (−4.91). scalper bought
+  **XLE 14 @ 62.28** at 11:07 ET (no catalyst, intraday strength; lesson 17 shape) and holds it.
+  Fleet lesson 20. Farm alive this morning (no `bars_stale_served`); Gateway restart at 11:45
+  AM local again (16:45 UTC, back by 16:47); twin's link also dropped at 21:07 UTC (back 21:12).
+  Standings: turtle −85.20, twin −85.75, swing −115.24, sniper −117.76, bold −119.61,
+  scalper −148.19, main −205.75.
+- **Bug (fixed, loads at the next restart): main's IBKR fills booked at commission 0.0** —
+  the XLV stop today, NVDA's stop 09-14, SPY's entry 09-23: 3 of main's 5 fills since 09-14
+  on a fixed plan with a $1 minimum, so the book's cash is ≥$3 high and today's report said
+  "fees paid today: 0.00 $". ib_async writes IB's separate commission report into the Fill
+  in place; `fills_since` converted the fill before it landed. It now yields up to 3 s while
+  an in-window fill has no report, then books what IB sent (still 0 if none comes — no
+  estimate). The past three fills are NOT corrected; the shadows (sim fees) are unaffected.
+- **scalper's overnight ticks took ~6 min, all in `quote`** (23 `tick_slow` 04:15–08:14
+  UTC, 342–370 s against a 300 s loop, no quote warning, so the quotes did answer) → four
+  `shadows_stale_once` on main's watchdog. First time in the journals; the other six were
+  fine. Not changed — no evidence of the cause; watch for a second night.
+- **Not restarted — six fixes now wait** (last `sim_stops_restored` 09-28 05:55 UTC): false
+  "supervisor stopped" alert, sub-share re-lists, `--strict-mcp-config` (9 of today's
+  journal lines on 5 variants still carry "Gmail … need authorizing"), trigger-symbol bars, the dead-tape note,
+  and tonight's commission wait. PowerShell is unavailable to this headless run.
+
 ## 2026-09-30 (Wednesday night, engineer) — dead history farm again until the 11:45 AM Gateway restart; scalper's scans re-diagnosed the null intraday tape six times; engine now says it once; still no restart since 09-28
 
 - **Dead farm, 3rd morning running.** Main's 00:05 UTC pass failed (VTI, NVDA, SPY → rest

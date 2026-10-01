@@ -184,3 +184,13 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    REJECTED line for the ~$26 of "add" that is less than one share. The engine now treats a
    held re-list whose extra is under one whole share as a hold; that line was noise, not a
    verdict on SPY. A real add still needs a full share of room and price above avg cost.)
+20. **The last name standing in a narrow tape is not a trend.** On 2026-09-28 breadth was
+   thin (IWM, DIA and six sector ETFs under their 50d) and the gates struck out every growth
+   candidate, so main, bold, turtle and twin bought XLV at half size (scalper on 09-30) as
+   "the one that qualifies". Its own leaders were not trending: JNJ and LLY sat under their
+   50d with a negative 1-month return. All five were stopped on 2026-10-01 at 165.8–166.9
+   (−$19 to −$35 each) and the losses tripped cooldowns to 10-05 on main, bold, twin and
+   swing (swing's JNJ and SPY stops the same day). One instance, but it is lesson 8 from the
+   other side: when the scan leaves exactly one name, check that the sector's own leaders
+   are above their 50d with a positive `ret_1m` — if not, it is a bounce bet, and the answer
+   on a neutral tape is `no_change`.
