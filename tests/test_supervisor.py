@@ -979,6 +979,25 @@ def test_event_run_fetches_the_trigger_symbol_even_when_unwatched(env, monkeypat
     assert fetched and sym in fetched[-1]
 
 
+def test_news_poll_quotes_watched_symbols_only_when_the_gate_can_fire(env, monkeypatch):
+    """2026-10-01/02: scalper's off-hours ticks spent ~345 s in `quote` against a 300 s loop
+    (4 watchdog stale sightings a night), quoting every watched symbol for day moves that a
+    closed gate ignores. Outside the fill window the news job quotes nothing extra."""
+    m, broker, sup, clock, tmp = env
+    sup.state.watchlist = ["SPY", "QQQ"]
+    asked = []
+    real_quotes = sup._quotes
+    monkeypatch.setattr(sup, "_quotes", lambda symbols: asked.append(set(symbols)) or real_quotes(symbols))
+
+    clock.now = datetime(2026, 8, 12, 6, 30, tzinfo=timezone.utc)    # 02:30 ET, closed
+    sup._news_job(clock.now, {})
+    assert asked == []
+
+    clock.now = datetime(2026, 8, 12, 18, 30, tzinfo=timezone.utc)   # 14:30 ET, in window
+    sup._news_job(clock.now, {})
+    assert asked and {"SPY", "QQQ"} <= asked[-1]
+
+
 def test_intraday_scan_says_so_when_no_row_has_todays_tape(md, tmp_path, monkeypatch):
     """2026-09-30: the history farm was dead until 16:45 UTC and scalper's scans got day_* =
     null on every row; six wrote paragraphs re-diagnosing the feed. The engine now names the

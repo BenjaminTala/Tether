@@ -790,10 +790,17 @@ class Supervisor:
                      if s.score >= self.m.cadence.event.min_materiality for sym in s.symbols}
         watched = set(self.state.watchlist) | mentioned
         gate = EventGateState.from_dict(self.state.event_gate)
-        need_quotes = (held | watched) - set(quotes)
-        if need_quotes:
-            quotes = {**quotes, **self._quotes(need_quotes)}
-        moves = self._day_moves(held | watched, quotes, now)
+        can_fire = self._orders_can_fill(now) and now.timestamp() >= self.state.llm_retry_after_ts
+        # Quotes and day moves only feed a gate that can fire. 2026-10-01 and 10-02: scalper's
+        # off-hours ticks spent ~345 s in `quote` (00:15-04:15 ET, no IB quotes, every watched
+        # symbol waited out reqTickers + the stream timeout) against a 300 s loop - 4 watchdog
+        # `shadows_stale_once` a night - for moves the closed gate then ignored.
+        moves: Dict[str, float] = {}
+        if can_fire:
+            need_quotes = (held | watched) - set(quotes)
+            if need_quotes:
+                quotes = {**quotes, **self._quotes(need_quotes)}
+            moves = self._day_moves(held | watched, quotes, now)
         # While orders cannot fill the gate must not consume budget/cooldown: the run below
         # cannot act, and pre-market headlines would otherwise spend the day's events before
         # the open (2026-08-27). "Cannot fill" includes the open/close no-trade buffers, not
@@ -802,9 +809,7 @@ class Supervisor:
         # can_fire also respects the usage-limit backoff: while Claude is rate-limited a
         # trigger is a guaranteed HOLD, so the gate must not spend budget on it.
         trigger = check_event_gate(self.m.cadence.event, gate, self._scored_recent,
-                                   held, watched, moves, now,
-                                   can_fire=(self._orders_can_fill(now)
-                                             and now.timestamp() >= self.state.llm_retry_after_ts))
+                                   held, watched, moves, now, can_fire=can_fire)
         self.state.event_gate = gate.as_dict()
         self.state.save(self.data_dir / "schedule_state.json")
         if trigger:
