@@ -72,7 +72,9 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    2026-09-30: the intraday version — `day_*` null on every row until the midday Gateway
    restart — drew six multi-paragraph scalper notes asking the human to "check the feed";
    September has 78 of them. When the run's note says "no intraday tape this run", the
-   outage is already known and journaled: manage held stops, no new entry, one line.)
+   outage is already known and journaled: manage held stops, no new entry, one line.
+   2026-10-02: the first scan with that note, on a stale pre-open tape, answered it in its
+   opening line and moved on — that is the whole job.)
 11. **Second-try fills work on liquid ETFs.** XLF expired unfilled once and filled on the
    next day's re-attempt at ask+35bps for two variants; LLY never did. Lesson 5 holds:
    express a thesis through the instrument that fills.

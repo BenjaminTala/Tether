@@ -1,5 +1,30 @@
 # Live-session learnings
 
+## 2026-10-02 (Friday night, engineer) — all 7 restarted at 01:39 UTC on their own, so the six waiting fixes are live; scalper's slow overnight quotes traced to the news job and fixed; quiet green day
+
+- **Restart happened without us.** `sim_stops_restored` on bold, scalper, sniper at 01:39:11
+  UTC and a "no Gateway process is listening" connect error on all 7 at 01:39:29 (reconnected
+  01:44) look like a PC reboot. Everything committed through e5fdce1 loaded then. Checks: no
+  "Gmail … authorizing" in any of today's 21 decision notes (`--strict-mcp-config` works);
+  scalper's 13:39 UTC scan, on a stale tape (`bars_refresh today: 0`), opened with "No
+  intraday tape this run" — the dead-tape note works; main logged one `tick_slow` all day.
+  No main fills, so the commission wait is not yet proven.
+- **Bug (fixed, loads at the next restart): scalper's off-hours quotes.** Second night: 25
+  `tick_slow` 04:17–08:15 UTC, each ~347 s, all `quote` against a 300 s loop → four more
+  `shadows_stale_once`. The window is 00:15–04:15 ET, when IB sends no quotes, so every
+  symbol waits out reqTickers plus the 8 s stream timeout before falling back to the close.
+  The news job quoted held + watchlist + every symbol in material news to compute day moves,
+  then passed `can_fire=False` to a gate that ignores them when closed. scalper has the
+  biggest watched set, hence only scalper. The news job now quotes (and pulls bars for)
+  watched symbols only when the gate can fire; held quotes in the tick are unchanged.
+  Not order- or risk-related.
+- **Day**: 21 runs, all `no_change`. main, bold, twin, swing, scalper are paused until 10-05.
+  scalper held XLE and moved its stop to 61.8, under the day's open; sniper's NVDA trailed
+  to 223.22. The farm was dead from 00:02 UTC until about 14:07 (scalper recovered without a Gateway
+  restart). The Gateway auto-restart came at 11:45 AM local again (16:45 UTC). bold, sniper and turtle
+  also dropped at 21:07 UTC (back 21:12), as twin did yesterday. Standings: turtle −54.80,
+  twin −64.11, sniper −87.41, swing −99.80, bold −104.87, scalper −143.20, main −178.44.
+
 ## 2026-10-01 (Thursday night, engineer) — XLV stopped out fleet-wide and tripped four cooldowns; main's broker fills booked at $0 fee; scalper's overnight quotes took 6 min a tick; still no restart
 
 - **XLV, one bet five times.** main, bold, turtle, twin (09-28) and scalper (09-30) held
