@@ -1,5 +1,26 @@
 # Live-session learnings
 
+## 2026-10-03 (Saturday night, engineer) — quiet Saturday, docs only; the news-job fix is still not loaded; scalper's scan ticks always run ~90 s (62 quotes, one at a time)
+
+- **Day**: market closed. No runs, decisions, orders or fills on any of the 7; standings are
+  Friday's. All 7 heartbeats fresh at 22:40 UTC. No `tick_slow` and no watchdog line all day.
+- **Farm dead again** from the 00:02 UTC cache fill on all 7 (`bars_stale_served`) until the
+  Gateway's 11:45 AM local restart (16:45 UTC drop, `bars_recovered` 16:50–16:54). scalper
+  and twin also lost the link at 08:38 UTC (30 s quote timeout, back 08:43), scalper again at
+  13:44 (back 13:49). Nothing to trade, so no cost.
+- **Not restarted**: last `sim_stops_restored` is 10-02 01:39 UTC, so 66f148d (news job
+  quotes watched symbols only when the gate can fire) is not loaded. scalper's 04:15–08:15
+  UTC window had zero slow ticks today anyway — on the old code, so this proves nothing about
+  the fix; why Saturday was quiet was not checked. PowerShell was denied to this headless
+  run again, so no restart dance.
+- **Seen, not changed: every scalper scan tick overruns the 60 s loop.** 13 of 13 scans on
+  10-01 and on 10-02 took 84–136 s (the first of the day 179 and 235 s), `quote` 53–65 s
+  each time; the same on 09-30 afternoon. Day-trader runs quote the whole whitelist
+  (`_symbols_for_run`, 62 symbols) one `reqTickers` at a time, ~1 s each. So once per 30 min
+  scalper's protective pass is ~30 s late, on a sim. A batched quote would fix it but sits
+  in the broker quote path that main's risk and orders use — not a small change, left alone.
+- Monday 10-05: cooldowns end on main, bold, twin, swing and scalper.
+
 ## 2026-10-02 (Friday night, engineer) — all 7 restarted at 01:39 UTC on their own, so the six waiting fixes are live; scalper's slow overnight quotes traced to the news job and fixed; quiet green day
 
 - **Restart happened without us.** `sim_stops_restored` on bold, scalper, sniper at 01:39:11
