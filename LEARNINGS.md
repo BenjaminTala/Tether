@@ -1,5 +1,27 @@
 # Live-session learnings
 
+## 2026-10-04 (Sunday night, engineer) — quiet Sunday, docs only; the Sunday Gateway logout came again (12:22–16:45 UTC) and the 11:45 AM auto-restart healed it; still no restart
+
+- **Day**: market closed. No runs, decisions, orders or fills on any of the 7; standings are
+  Friday's (turtle −54.80, twin −64.11, sniper −87.41, swing −99.80, bold −104.87, scalper
+  −143.20, main −178.44). All 7 heartbeats fresh at 22:40 UTC. 295 tests green.
+- **Sunday logout, as on 09-06 and 09-20.** All 7 lost the link at 12:22–12:25 UTC (30 s
+  quote timeouts on held symbols; main's `fills_since` timed out), then "port accepted but
+  the API handshake timed out … LOGGED OUT" from 12:28. Four hourly `still_down` lines each,
+  `reconnected` 16:45–16:50 UTC after 253–259 min — the Gateway's 11:45 AM local auto-restart
+  logged itself back in. Nothing to trade, so no cost. All 7 are connected for Monday.
+- **Not known for Monday: the history farm.** No `bars_*` line on any variant today (no new
+  session, so no refresh was due). Whether Monday's 00:02 UTC fill finds a live farm will
+  only show then; if not, the pattern says cached bars until 16:45 UTC.
+- **Not restarted**: last `sim_stops_restored` is still 10-02 01:39 UTC, so 66f148d (news
+  job quotes watched symbols only when the gate can fire) is not loaded. PowerShell was
+  denied to this headless run again. scalper had zero `tick_slow` on Saturday and Sunday
+  04:15–08:15 UTC on the old code; the slow nights were both weeknights (10-01, 10-02), so
+  expect them — and four `shadows_stale_once` a night — to return this week until a
+  restart loads the fix. Why weekends are quiet was not checked.
+- **Nothing changed in code tonight** — no error in two days of journals that is not the
+  known Gateway logout. Monday 10-05: cooldowns end on main, bold, twin, swing and scalper.
+
 ## 2026-10-03 (Saturday night, engineer) — quiet Saturday, docs only; the news-job fix is still not loaded; scalper's scan ticks always run ~90 s (62 quotes, one at a time)
 
 - **Day**: market closed. No runs, decisions, orders or fills on any of the 7; standings are
