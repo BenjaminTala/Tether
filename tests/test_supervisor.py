@@ -1145,3 +1145,47 @@ def test_schedule_state_save_retries_a_briefly_locked_target(tmp_path, monkeypat
     monkeypatch.setattr(Path, "replace", lambda self, t: (_ for _ in ()).throw(PermissionError(13, "x")))
     with pytest.raises(PermissionError):  # a lock that persists still surfaces to the tick
         s.save(path)
+
+
+def test_model_run_names_rows_older_than_the_last_session(env, monkeypatch):
+    """2026-10-05: farm dead at the open; fallback rows of different ages went into
+    market.json unmarked (main's MSFT ended 09-30 and read 1.05 ATR over ma20, bold's ended
+    10-02 and read 1.37). Each row now carries `last_bar`, and the run's note names the rows
+    that end before the last full session - and says nothing when none do."""
+    import ibagent.supervisor as sv
+    from ibagent.broker.base import Bar
+    m, broker, sup, clock, tmp = env
+    sup.skills_dir = _install_skills(tmp)
+    sup.state.watchlist = ["JPM", "NVDA"]
+    seen = []
+
+    class _Stop(Exception):
+        pass
+
+    def capture(*a, event_note="", **k):
+        seen.append((event_note, a[8]))
+        raise _Stop()
+    monkeypatch.setattr(sv, "run_cycle", capture)
+    yday, old = NOW - timedelta(days=1), NOW - timedelta(days=5)      # Tue 08-11, Fri 08-07
+    broker.daily_bars = lambda c, d: [Bar(old if c.symbol == "JPM" else yday,
+                                          100.0, 101.0, 99.0, 100.5, 1e6)]
+    with pytest.raises(_Stop):
+        sup._agent_job("daily", clock())
+    note, stats = seen[-1]
+    assert stats["JPM"].last_bar == "2026-08-07" and stats["NVDA"].last_bar == "2026-08-11"
+    assert "old price rows" in note and "JPM 2026-08-07" in note and "NVDA" not in note
+
+    sup._bars_cache.clear()
+    broker.daily_bars = lambda c, d: [Bar(yday, 100.0, 101.0, 99.0, 100.5, 1e6)]
+    with pytest.raises(_Stop):
+        sup._agent_job("daily", clock())
+    assert seen[-1][0] == ""
+
+
+def test_report_says_the_entry_pause_includes_its_last_day(env):
+    """10-01..10-04: "paused until 2026-10-05" was read as "ends 10-05" in four engineer
+    notes to the owner; the pause is inclusive and 10-05 was still a refused day."""
+    m, broker, sup, clock, tmp = env
+    sup.book.pause_entries(date(2026, 8, 13), "5 losing trades in a row (cooldown)")
+    out = sup._watch_outs({}, clock())
+    assert any("paused through 2026-08-13, that day included" in line for line in out)

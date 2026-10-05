@@ -40,6 +40,7 @@ class SymbolStats:
     day_change_from_open: Optional[float] = None   # (last - today's open) / open
     day_change: Optional[float] = None             # (last - prev close) / prev close
     day_range_pos: Optional[float] = None          # 0 = at day low, 1 = at day high
+    last_bar: Optional[str] = None                 # ISO date of the newest bar behind this row
 
 
 def atr(bars: Sequence[Bar], period: int = 14) -> Optional[float]:
@@ -132,6 +133,7 @@ def symbol_stats(symbol: str, bars: Sequence[Bar], atr_period: int = 14,
         day_change_from_open=day_from_open,
         day_change=day_change,
         day_range_pos=day_range_pos,
+        last_bar=bars[-1].ts.date().isoformat(),
     )
 
 

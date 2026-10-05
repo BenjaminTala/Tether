@@ -924,6 +924,21 @@ class Supervisor:
                     "in market.json is null. This is a data outage, not a quiet tape, and it "
                     "is already journaled. Manage held positions on their stops; take no new "
                     "continuation entry; say so in one line (fleet lesson 10) and `no_change`.")
+        last_session = previous_trading_day(today_local).isoformat()
+        behind = sorted(s for s, v in stats.items() if v.last_bar and v.last_bar < last_session)
+        if behind:
+            # 2026-10-05: farm dead at the open, so rows came from the fallback at different
+            # ages. main's MSFT row ended 09-30 and read "1.05 ATR over ma20"; bold's ended
+            # 10-02 and read 1.37. turtle, swing and twin had AMD at 2.56 (10-01), main and
+            # sniper at 2.78. Nothing in market.json told them apart.
+            event_note += ("\n\n" if event_note else "") + (
+                "**Engine note - old price rows.** The broker's history service did not "
+                f"answer for these symbols, so their market.json rows end before {last_session} "
+                "(the last full session; each row's `last_bar` is its date): "
+                + ", ".join(f"{s} {stats[s].last_bar}" for s in behind[:12])
+                + (f" and {len(behind) - 12} more" if len(behind) > 12 else "")
+                + ". Their `close`, `ma20`, `atr` and returns are that old. Do not pass an "
+                "entry or extension check on such a row; say in one line that it is old.")
         atrs ={s: v.atr for s, v in stats.items() if v.atr}
         held = set(self.book.positions)
         digest = build_digest(self._scored_recent, held, set(self.state.watchlist))
@@ -1356,8 +1371,10 @@ class Supervisor:
             if self.book.is_sleeve_paused(sleeve, today):
                 out.append(f"The {sleeve} strategy is paused (losses) until {until}.")
         if self.book.entries_paused(today):
-            out.append(f"New buying is paused until {self.book.entries_paused_until} "
-                       f"({self.book.entries_paused_reason}).")
+            # "until" read as "ends on": the 10-01..10-04 engineer notes told the owner the
+            # pause ended 10-05, and on 10-05 all five paused variants still refused entries.
+            out.append(f"New buying is paused through {self.book.entries_paused_until}, that day "
+                       f"included ({self.book.entries_paused_reason}).")
         if self.book.consecutive_spec_losers >= 3:
             out.append(f"{self.book.consecutive_spec_losers} speculative trades lost in a row.")
         for p in sorted(self.book.positions.values(), key=lambda x: x.symbol):
