@@ -74,7 +74,13 @@ description: Distilled, EVIDENCE-BASED lessons from this system's own backtests 
    September has 78 of them. When the run's note says "no intraday tape this run", the
    outage is already known and journaled: manage held stops, no new entry, one line.
    2026-10-02: the first scan with that note, on a stale pre-open tape, answered it in its
-   opening line and moved on — that is the whole job.)
+   opening line and moved on — that is the whole job.
+   2026-10-05: a third version — rows that are present but OLD. With the history service
+   down, main's MSFT row ended 09-30 and read 1.05 ATR over ma20; bold's ended 10-02 and
+   read 1.37, on the same morning. Every row now has `last_bar`. If it is before the last
+   full session, or the run's note lists the symbol under "old price rows", that row's
+   `close`, `ma20`, `atr` and returns cannot pass an entry or extension check: say it is
+   old in one line and pass on that name.)
 11. **Second-try fills work on liquid ETFs.** XLF expired unfilled once and filled on the
    next day's re-attempt at ask+35bps for two variants; LLY never did. Lesson 5 holds:
    express a thesis through the instrument that fills.

@@ -1,5 +1,41 @@
 # Live-session learnings
 
+## 2026-10-05 (Monday night, engineer) — the pause ran THROUGH Monday, not until it (four nights of notes had it a day early); farm dead at the open again and the fallback rows were of mixed ages, unmarked; the Claude config file was found corrupted at 13:47 UTC; still no restart
+
+- **Correction to 10-01..10-04.** Those entries and last night's Telegram report said the
+  cooldowns "end 10-05". The pause is inclusive (`entries_paused`: today <= until), so main,
+  bold, twin, swing and scalper refused entries all Monday and reopen **Tuesday 10-06**. The
+  daily report's own line, "paused until 2026-10-05", is what was misread; it now says
+  "paused through <date>, that day included". The models read portfolio.json's "through
+  this date, inclusive" and got it right in all 27 runs.
+- **Day**: 27 runs (weekly + daily on all 7, 13 scalper scans), all `no_change`, no
+  rejections. One fill: scalper's engine partial on XLE, 7 @ 63.51 at +1R (+7.07), and the
+  17:11 UTC scan moved the rest to breakeven 62.36 in the first hour over +1R (lesson 14
+  asks for a session; outcome open). turtle passed on SPY as the only gate-passing name,
+  citing lesson 20. Standings: turtle −30.90, twin −47.68, sniper −58.24, swing −88.07,
+  bold −92.83, scalper −133.26, main −157.27.
+- **Farm dead from the first pass (13:38–13:47 UTC) to the Gateway's 11:45 AM local
+  restart** (16:45 UTC, `bars_recovered` 16:46–16:48). No bars line before 13:38, so when
+  it died is not known. The weeklies, which scan the whole whitelist, got 10–11 rows; six
+  said so. scalper logged 44 `tick_slow`, most `bars: 60` every ~5 min until 16:43; the
+  other six stopped retrying after 13:55 — why the difference was not checked.
+- **Bug (fixed, loads at the next restart): old fallback rows were unmarked.** main's
+  `bars_stale_served` shows DIS, LLY, MRK, MSFT ending 09-30 or earlier; its weekly read
+  MSFT "1.05 ATR over ma20" where bold (bars to 10-02) read 1.37. turtle, swing and twin
+  read AMD 2.56 on bars to 10-01; main and sniper 2.78. No order rested on these. Rows now
+  carry `last_bar`, and the run's note names rows that end before the last full session.
+  The engine's own use of fallback ATRs (stops, sizing; up to 5 days old) is unchanged.
+- **New: `~/.claude.json` was unparseable at 13:47 UTC.** main's and twin's weekly attempt
+  0 died in 0.65 s and 2.18 s ("configuration file … is corrupted … has already been backed
+  up"); attempt 1 passed on both. First time in the journals. The file parses tonight; the
+  backup the error names is stamped 13:39 UTC. Cause not established — seven
+  `claude -p` runs start within the same minute on Mondays. Not changed.
+- Also: main and bold dropped at 16:33 UTC (back 16:34); bold and swing at 21:07 (back
+  21:12), the same minute as on 10-01 and 10-02.
+- **Not restarted**: PowerShell was denied to this headless run again; no other route
+  tried. Last `sim_stops_restored` is 10-02 01:39 UTC, so 66f148d and tonight's commit are
+  not loaded. All 7 heartbeats fresh after the close. 297 tests green.
+
 ## 2026-10-04 (Sunday night, engineer) — quiet Sunday, docs only; the Sunday Gateway logout came again (12:22–16:45 UTC) and the 11:45 AM auto-restart healed it; still no restart
 
 - **Day**: market closed. No runs, decisions, orders or fills on any of the 7; standings are
