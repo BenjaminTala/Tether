@@ -39,6 +39,22 @@
   15:36 UTC start — but none of it has run against a live broker yet. scalper's last
   night on the old code (10-06 04:17–04:48 UTC) had 4 `tick_slow`, ~329 s in `quote`, as
   expected. No restart tonight: neither change needs one. 300 tests green.
+- **Second run the same day, 22:40 UTC (the scheduled one) — docs only.** Still nothing on
+  4002 and no Gateway process; since 18:48 UTC the 7 journals hold only three more hourly
+  `still_down` lines on main. All 7 supervisor tasks "Running" since the 18:37 UTC logon.
+  - *Why the Gateway never came back*: nothing starts it. `schtasks` lists Supervisor, six
+    Shadow tasks, Watchdog and Engineer — no `IBAgent-Gateway`; there is no `C:\IBC`, and no
+    Gateway entry in the Startup folder or the HKCU Run key. The last Gateway launcher log
+    (`C:\Jts\ibgateway\1050\launcher.log`) is from 10-05 16:45 UTC, its own daily restart.
+    So every boot since 10-06 brought up 7 supervisors and no broker (as noted on 09-27).
+    Its daily auto-restart only helps while it is already running.
+  - *Why the earlier run was at 18:43 UTC*: the Engineer task is daily at 22:40 UTC and the
+    PC was off at that hour on 10-10; Task Scheduler most likely ran the missed start after
+    the 18:37 logon (the task's settings were not read — PowerShell denied).
+  - *PC clock zone moved*: commits through 10-05 are stamped −0500, today's −0300. The
+    engine's clock is `America/New_York` by name, so cadence is unaffected. The Gateway's
+    "11:45 AM" restart, if it follows the PC clock, would now fall at 14:45 UTC (10:45 ET,
+    inside the session) instead of 16:45 — not verified; watch for the drop time.
 
 ## 2026-10-05 (Monday night, engineer) — the pause ran THROUGH Monday, not until it (four nights of notes had it a day early); farm dead at the open again and the fallback rows were of mixed ages, unmarked; the Claude config file was found corrupted at 13:47 UTC; still no restart
 
