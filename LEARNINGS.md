@@ -1,5 +1,45 @@
 # Live-session learnings
 
+## 2026-10-11 (Sunday, engineer, run at 18:43 UTC) — the fleet was dark for the whole week: no Gateway since 10-06 04:55 UTC, four sessions with no run, decision or order; three engineer runs died on a usage limit and the harness re-sent the 10-05 report each time
+
+- **ONGOING at 18:45 UTC Sunday: nothing listens on 4002** (`netstat` empty, no Gateway
+  process in `tasklist`). All 7 lost the link at 04:55 UTC Tuesday 10-06 ("Socket
+  disconnect", then nothing until the next start), and every start since ends in
+  "connection refused - no Gateway process is listening": 10-06 15:36, 10-07 05:38, 10-08
+  15:42 and 21:54, 10-09 18:44 and 21:37, 10-10 03:21 and 03:32, 10-11 18:37 UTC
+  (`sim_stops_restored` on bold each time). The gaps between them have no journal line at
+  all, so the PC was off or asleep; the System event log was not read (PowerShell denied).
+  The supervisors were up, with no broker, for part of Tuesday's session, all of
+  Wednesday's, Thursday's from 15:42 UTC and about an hour of Friday's.
+- **Cost: Tuesday 10-06 to Friday 10-09, zero runs, decisions, orders or fills on all 7.**
+  The weekly of 10-05 is the last model run. No quotes, so no marks: `ibagent compare`
+  still shows Monday's (turtle −30.90, twin −47.68, sniper −58.24, swing −88.07, bold
+  −92.83, scalper −133.26, main −157.27). The shadows' sim stops did not run all week.
+  main's 1 SPY had its GTC stop at IBKR (759.63, tag `s20261005193410-SPY-STP9`) —
+  whether it filled is not known from here.
+- **Alerts**: main journaled 9 `connect` errors and 34 hourly `still_down` lines, each of
+  which also calls the Telegram alerter. Delivery was not checked.
+- **Not changed, for the first tick back**: `fills_since` reads IB's executions list; if
+  that holds only the current day (believed, not tested here), a SPY stop that filled
+  earlier in the week will not be seen, `_reconcile` will find SPY missing and freeze main
+  — the fail-closed outcome, needing the owner (`ibagent unfreeze` after checking the
+  account). Lesson 18 covers the models' side of a dark stretch as written.
+- **Bug (fixed, 2ef6c03): the engineer Telegram repeated an old report.** The 10-07, 10-08
+  and 10-09 runs each ended in "You've reached your Fable limit" (177-byte blobs); the
+  harness sent "no changes" plus `data/engineer_report.txt` as it stood, i.e. 10-05's
+  report three more times. It now sends the file only if the run rewrote it; otherwise
+  the verdict says NO REPORT WRITTEN and quotes the run's output. No run on 10-06 or 10-10
+  (no `engineer` line; PC not up at 22:40 UTC). Tonight's ran at 18:43 UTC, six minutes
+  after boot — why at that hour was not checked.
+- **Bug (fixed, fd39d6d, loads at the next supervisor start): that limit text was not
+  recognised** by `_USAGE_LIMIT_RE`. No trading run met it (there were none), but they use
+  the same binary and default model; unmatched, it is an ordinary failed run instead of the
+  usage-limit hold and backoff. Pattern extended, fail-closed only.
+- **Loaded**: everything through 9876ffa (66f148d and 81e197b included) since the 10-06
+  15:36 UTC start — but none of it has run against a live broker yet. scalper's last
+  night on the old code (10-06 04:17–04:48 UTC) had 4 `tick_slow`, ~329 s in `quote`, as
+  expected. No restart tonight: neither change needs one. 300 tests green.
+
 ## 2026-10-05 (Monday night, engineer) — the pause ran THROUGH Monday, not until it (four nights of notes had it a day early); farm dead at the open again and the fallback rows were of mixed ages, unmarked; the Claude config file was found corrupted at 13:47 UTC; still no restart
 
 - **Correction to 10-01..10-04.** Those entries and last night's Telegram report said the
