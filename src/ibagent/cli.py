@@ -235,6 +235,24 @@ def _build_shadow_supervisor(m: Mandate, name: str):
     return sup
 
 
+def _file_stamp(path: Path) -> Optional[tuple]:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+def _engineer_report(report_file: Path, stamp_before: Optional[tuple]) -> Optional[str]:
+    """Tonight's report, or None when the run left the file as it found it. On 2026-10-07,
+    10-08 and 10-09 the run died at once on a usage limit and the owner was sent 10-05's
+    report three more times under "no changes"."""
+    stamp = _file_stamp(report_file)
+    if stamp is None or stamp == stamp_before:
+        return None
+    return report_file.read_text(encoding="utf-8")[:3200]
+
+
 def cmd_engineer(args: argparse.Namespace) -> int:
     """Nightly self-improvement pass: a headless Claude run under ENGINEER.md's charter,
     fenced by deterministic guards (tests must pass, protected files must be untouched)."""
@@ -250,6 +268,8 @@ def cmd_engineer(args: argparse.Namespace) -> int:
         return (r.stdout or "").strip()
 
     pre_head = git("rev-parse", "HEAD")
+    report_file = repo / "data" / "engineer_report.txt"
+    stamp_before = _file_stamp(report_file)
     flags = 0x08000000 if sys.platform == "win32" else 0          # CREATE_NO_WINDOW
     cmd = [resolve_claude_bin(m.llm.claude_bin), "-p", "--output-format", "text",
            "--permission-mode", "dontAsk", "--max-turns", "80",
@@ -282,11 +302,14 @@ def cmd_engineer(args: argparse.Namespace) -> int:
             subprocess.run(["git", "push", "origin", "main"], cwd=repo, capture_output=True,
                            timeout=120)
             verdict = f"kept + pushed: {len(changed)} file(s) ({', '.join(changed[:6])})"
+    report = _engineer_report(report_file, stamp_before)
+    if report is None:
+        verdict += " - NO REPORT WRITTEN"
+        said = raw.split("\n--- stderr ---")[0].strip()[:400] or "(nothing)"
+        report = ("The engineer run did not write a report tonight, so it may not have run "
+                  f"at all. Its output began:\n{said}")
     journal.record("engineer", {"pre": pre_head[:9], "post": git("rev-parse", "HEAD")[:9],
                                 "verdict": verdict})
-    report_file = repo / "data" / "engineer_report.txt"
-    report = report_file.read_text(encoding="utf-8")[:3200] if report_file.exists() \
-        else "(engineer left no report)"
     from ibagent.alerts import build_alerter
     build_alerter(m.alerts).info("🔧 Nightly engineer", f"{verdict}\n\n{report}", dedupe=False)
     print(verdict)
