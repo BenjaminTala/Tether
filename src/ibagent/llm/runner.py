@@ -28,7 +28,7 @@ from ibagent.config import LLMCfg
 
 _USAGE_LIMIT_RE = re.compile(
     r"(usage limit|rate limit|too many requests|out of (usage|credits)|overloaded|quota|"
-    r"limit (has been )?reached|try again (later|in))", re.I)
+    r"limit (has been )?reached|reached your [\w.\- ]{0,30}limit|try again (later|in))", re.I)
 _UNKNOWN_FLAG_RE = re.compile(r"(unknown|unrecognized|invalid) (option|argument|flag)", re.I)
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
 _WIN_KEEP = ("SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATH", "PATHEXT", "COMSPEC", "USERPROFILE",

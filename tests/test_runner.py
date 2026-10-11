@@ -58,6 +58,10 @@ def test_parse_fenced_fallback_and_errors():
     assert not r2.ok and r2.error
     r3 = parse_claude_output("", "You have hit your usage limit. Try again later.", 1)
     assert not r3.ok and r3.usage_limited and r3.error == "usage/rate limited"
+    # the CLI's wording on 2026-10-07..09 (engineer blobs), printed on stdout with exit 1
+    r4 = parse_claude_output("You've reached your Fable limit. Switch to another model, or manage "
+                             "usage credits at https://claude.ai/settings/usage, to continue.", "", 1)
+    assert not r4.ok and r4.usage_limited and r4.error == "usage/rate limited"
 
 
 def test_extract_json_object_edge_cases():
